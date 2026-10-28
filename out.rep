@@ -1,0 +1,15 @@
+--- PAYOMBØYZ 6-TIER INDUSTRIAL DEOBFUSCATION REPORT ---
+File:                 test.lua
+Engine:               Test Engine + BST CFF Lifter
+Recovered Lines:      8
+Compiler Gate:        PASSED (100% EXECUTABLE)
+Semantic Diff Gate:   PASSED (100% Invariants Preserved)
+DCE Pruned Lines:     0
+Dataflow Constants:   0
+Roblox UI Replaced:   0
+SSA Inlined Regs:     0
+Auto-Patches:
+  - None (Clean First-Pass Compilation)
+
+Elapsed Time:         1792394512.53s
+Status:               100% Clean Code Surface (Zero Stubs, Zero VM Bytecode, Zero Hallucinations)

@@ -1,0 +1,685 @@
+{
+  "short_term": [
+    {
+      "type": "DECISION_MADE",
+      "decision": "WEAREDEVS_AST",
+      "score": 0.8135,
+      "confidence": 0.7994,
+      "timestamp": 1789908110.7759821
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "WEAREDEVS_AST",
+      "success": true,
+      "error": 13614.0,
+      "timestamp": 1789908110.776028
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "WEAREDEVS_AST",
+      "score": 0.836,
+      "confidence": 0.9405,
+      "timestamp": 1789909968.146891
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "WEAREDEVS_AST",
+      "success": true,
+      "error": 13614.0,
+      "timestamp": 1789909968.1469443
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "WEAREDEVS_AST",
+      "score": 0.836,
+      "confidence": 0.9405,
+      "timestamp": 1789925608.7725258
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "WEAREDEVS_AST",
+      "success": true,
+      "error": 8633.0,
+      "timestamp": 1789925627.0594075
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "WEAREDEVS_AST",
+      "score": 0.836,
+      "confidence": 0.9405,
+      "timestamp": 1789925746.347122
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "WEAREDEVS_AST",
+      "success": true,
+      "error": -288.0,
+      "timestamp": 1789925747.0083492
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "WEAREDEVS_AST",
+      "score": 0.5875,
+      "confidence": 0.19,
+      "timestamp": 1789925877.3844795
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "WEAREDEVS_AST",
+      "success": false,
+      "error": -500.0,
+      "timestamp": 1789925878.134006
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "WEAREDEVS_AST",
+      "score": 0.706,
+      "confidence": 0.6772,
+      "timestamp": 1789925944.393148
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "WEAREDEVS_AST",
+      "success": true,
+      "error": -288.0,
+      "timestamp": 1789925945.1262348
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "WEAREDEVS_AST",
+      "score": 0.8109,
+      "confidence": 0.7834,
+      "timestamp": 1789926070.489957
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "WEAREDEVS_AST",
+      "success": true,
+      "error": -288.0,
+      "timestamp": 1789926071.5925753
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "WEAREDEVS_AST",
+      "score": 0.566,
+      "confidence": 0.1628,
+      "timestamp": 1789926393.5063004
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "WEAREDEVS_AST",
+      "success": false,
+      "error": -500.0,
+      "timestamp": 1789926394.7563
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "WEAREDEVS_AST",
+      "score": 0.6985,
+      "confidence": 0.6349,
+      "timestamp": 1789980589.9476838
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "WEAREDEVS_AST",
+      "success": true,
+      "error": -490.0,
+      "timestamp": 1789980591.4016428
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "WEAREDEVS_AST",
+      "score": 0.8027,
+      "confidence": 0.7317,
+      "timestamp": 1789980730.4199448
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "WEAREDEVS_AST",
+      "success": true,
+      "error": -479.0,
+      "timestamp": 1789980739.2021954
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "WEAREDEVS_AST",
+      "score": 0.806,
+      "confidence": 0.7524,
+      "timestamp": 1789981014.9559653
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "WEAREDEVS_AST",
+      "success": true,
+      "error": -478.0,
+      "timestamp": 1789981017.4589999
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "WEAREDEVS_AST",
+      "score": 0.8087,
+      "confidence": 0.7693,
+      "timestamp": 1789982869.2873034
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "WEAREDEVS_AST",
+      "success": true,
+      "error": -477.0,
+      "timestamp": 1789982870.7629254
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "WEAREDEVS_AST",
+      "score": 0.8109,
+      "confidence": 0.7834,
+      "timestamp": 1789983235.9835718
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "WEAREDEVS_AST",
+      "success": true,
+      "error": -374.0,
+      "timestamp": 1789983240.9962656
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "WEAREDEVS_AST",
+      "score": 0.8129,
+      "confidence": 0.7957,
+      "timestamp": 1789983868.3040812
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "WEAREDEVS_AST",
+      "success": true,
+      "error": -490.0,
+      "timestamp": 1789983870.1414645
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "WEAREDEVS_AST",
+      "score": 0.566,
+      "confidence": 0.1628,
+      "timestamp": 1789993662.963679
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "WEAREDEVS_AST",
+      "success": false,
+      "error": -500.0,
+      "timestamp": 1789993844.3112154
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "BASE64_LOADER",
+      "score": 0.869,
+      "confidence": 0.7994,
+      "timestamp": 1789996127.8612413
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "BASE64_LOADER",
+      "success": true,
+      "error": 10303.0,
+      "timestamp": 1789996128.457208
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "BASE64_LOADER",
+      "score": 0.8915,
+      "confidence": 0.9405,
+      "timestamp": 1789996172.4748957
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "BASE64_LOADER",
+      "success": true,
+      "error": 10303.0,
+      "timestamp": 1789996173.0111156
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "TWOK_SECURITY",
+      "score": 0.55,
+      "confidence": 0.0808,
+      "timestamp": 1790080409.533584
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "TWOK_SECURITY",
+      "success": true,
+      "error": 6023.0,
+      "timestamp": 1790080488.1705177
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "TWOK_SECURITY",
+      "score": 0.5725,
+      "confidence": 0.095,
+      "timestamp": 1790081805.1775713
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "TWOK_SECURITY",
+      "success": true,
+      "error": 1714.0,
+      "timestamp": 1790081857.048968
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "TWOK_SECURITY",
+      "score": 0.5725,
+      "confidence": 0.095,
+      "timestamp": 1790081930.4947338
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "TWOK_SECURITY",
+      "success": true,
+      "error": 1714.0,
+      "timestamp": 1790081979.3071816
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "WEAREDEVS_AST",
+      "score": 0.806,
+      "confidence": 0.7524,
+      "timestamp": 1790096948.791157
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "WEAREDEVS_AST",
+      "success": true,
+      "error": 5263.0,
+      "timestamp": 1790096997.481126
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "TWOK_SECURITY",
+      "score": 0.5725,
+      "confidence": 0.095,
+      "timestamp": 1790103402.5606427
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "TWOK_SECURITY",
+      "success": true,
+      "error": 1522.0,
+      "timestamp": 1790103402.9446704
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "WEAREDEVS_AST",
+      "score": 0.8078,
+      "confidence": 0.7637,
+      "timestamp": 1790176434.0630045
+    },
+    {
+      "type": "FEEDBACK",
+      "action": "WEAREDEVS_AST",
+      "success": true,
+      "error": 12919.0,
+      "timestamp": 1790176524.9638193
+    },
+    {
+      "type": "DECISION_MADE",
+      "decision": "MASTER_FLOWCHART_ENGINE",
+      "score": 0.98,
+      "confidence": 0.99,
+      "timestamp": 1792175006.7515843,
+      "note": "Unified 8-Cell Council Matrix"
+    }
+  ],
+  "working": {},
+  "long_term": {},
+  "failure_memory": {
+    "WEAREDEVS_AST": {
+      "count": 3,
+      "history": [
+        {
+          "action": "WEAREDEVS_AST",
+          "expected": 500.0,
+          "actual": 0.0,
+          "error": -500.0,
+          "error_pct": -100.0,
+          "is_success": false,
+          "failure_reason": "Could not identify string table variable in C:\\Users\\Dream\\Downloads\\aa\\desktop\\Roblox Script\\Deobfuscate\\output\\gg_1789925877349.txt (Not a recognized Prometheus/WeAreDevs script).",
+          "metadata": {
+            "filename": "gg.txt",
+            "engine": "🛠️ WeAreDevs (Prometheus AST Devirtualizer)"
+          },
+          "timestamp": 1789925878.133996
+        },
+        {
+          "action": "WEAREDEVS_AST",
+          "expected": 500.0,
+          "actual": 0.0,
+          "error": -500.0,
+          "error_pct": -100.0,
+          "is_success": false,
+          "failure_reason": "Could not find return(function injection point in C:\\Users\\Dream\\Downloads\\aa\\desktop\\Roblox Script\\Deobfuscate\\output\\iron-soul_1789926393481.txt (Not a WeAreDevs/Prometheus structure).",
+          "metadata": {
+            "filename": "iron-soul.txt",
+            "engine": "🛠️ WeAreDevs (Prometheus AST Devirtualizer)"
+          },
+          "timestamp": 1789926394.7562902
+        },
+        {
+          "action": "WEAREDEVS_AST",
+          "expected": 500.0,
+          "actual": 0.0,
+          "error": -500.0,
+          "error_pct": -100.0,
+          "is_success": false,
+          "failure_reason": "Could not find return(function injection point in C:\\Users\\Dream\\Desktop\\Games\\Deobfuscate\\output\\message_1789993662943.txt (Not a WeAreDevs/Prometheus structure).",
+          "metadata": {
+            "filename": "message.txt",
+            "engine": "🛠️ WeAreDevs (Prometheus AST Devirtualizer)"
+          },
+          "timestamp": 1789993844.3111808
+        }
+      ]
+    }
+  },
+  "success_memory": {
+    "WEAREDEVS_AST": {
+      "count": 14,
+      "history": [
+        {
+          "action": "WEAREDEVS_AST",
+          "expected": 500.0,
+          "actual": 14114.0,
+          "error": 13614.0,
+          "error_pct": 2722.8,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "test": true
+          },
+          "timestamp": 1789908110.7760215
+        },
+        {
+          "action": "WEAREDEVS_AST",
+          "expected": 500.0,
+          "actual": 14114.0,
+          "error": 13614.0,
+          "error_pct": 2722.8,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "test": true
+          },
+          "timestamp": 1789909968.1469383
+        },
+        {
+          "action": "WEAREDEVS_AST",
+          "expected": 500.0,
+          "actual": 9133.0,
+          "error": 8633.0,
+          "error_pct": 1726.6,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "filename": "WRDO4.txt",
+            "engine": "🛠️ WeAreDevs (Prometheus AST Devirtualizer)"
+          },
+          "timestamp": 1789925627.0593905
+        },
+        {
+          "action": "WEAREDEVS_AST",
+          "expected": 500.0,
+          "actual": 212.0,
+          "error": -288.0,
+          "error_pct": -57.6,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "filename": "3c9d1fb122e21d75.lua",
+            "engine": "🛠️ WeAreDevs (Prometheus AST Devirtualizer)"
+          },
+          "timestamp": 1789925747.0083392
+        },
+        {
+          "action": "WEAREDEVS_AST",
+          "expected": 500.0,
+          "actual": 212.0,
+          "error": -288.0,
+          "error_pct": -57.6,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "filename": "98df288eb1d86c67.txt",
+            "engine": "🛠️ WeAreDevs (Prometheus AST Devirtualizer)"
+          },
+          "timestamp": 1789925945.1262276
+        },
+        {
+          "action": "WEAREDEVS_AST",
+          "expected": 500.0,
+          "actual": 212.0,
+          "error": -288.0,
+          "error_pct": -57.6,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "filename": "988205ffbc2498bb.txt",
+            "engine": "🛠️ WeAreDevs (Prometheus AST Devirtualizer)"
+          },
+          "timestamp": 1789926071.5925672
+        },
+        {
+          "action": "WEAREDEVS_AST",
+          "expected": 500.0,
+          "actual": 10.0,
+          "error": -490.0,
+          "error_pct": -98.0,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "filename": "message.txt",
+            "engine": "🛠️ WeAreDevs (Prometheus AST Devirtualizer)"
+          },
+          "timestamp": 1789980591.4016297
+        },
+        {
+          "action": "WEAREDEVS_AST",
+          "expected": 500.0,
+          "actual": 21.0,
+          "error": -479.0,
+          "error_pct": -95.8,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "filename": "message.txt",
+            "engine": "🛠️ WeAreDevs (Prometheus AST Devirtualizer)"
+          },
+          "timestamp": 1789980739.2021835
+        },
+        {
+          "action": "WEAREDEVS_AST",
+          "expected": 500.0,
+          "actual": 22.0,
+          "error": -478.0,
+          "error_pct": -95.6,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "filename": "message.txt",
+            "engine": "🛠️ WeAreDevs (Prometheus AST Devirtualizer)"
+          },
+          "timestamp": 1789981017.458993
+        },
+        {
+          "action": "WEAREDEVS_AST",
+          "expected": 500.0,
+          "actual": 23.0,
+          "error": -477.0,
+          "error_pct": -95.4,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "filename": "message.txt",
+            "engine": "🛠️ WeAreDevs (Prometheus AST Devirtualizer)"
+          },
+          "timestamp": 1789982870.7629175
+        },
+        {
+          "action": "WEAREDEVS_AST",
+          "expected": 500.0,
+          "actual": 126.0,
+          "error": -374.0,
+          "error_pct": -74.8,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "filename": "message.txt",
+            "engine": "🛠️ WeAreDevs (Prometheus AST Devirtualizer)"
+          },
+          "timestamp": 1789983240.9962578
+        },
+        {
+          "action": "WEAREDEVS_AST",
+          "expected": 500.0,
+          "actual": 10.0,
+          "error": -490.0,
+          "error_pct": -98.0,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "filename": "message.txt",
+            "engine": "🛠️ WeAreDevs (Prometheus AST Devirtualizer)"
+          },
+          "timestamp": 1789983870.1414568
+        },
+        {
+          "action": "WEAREDEVS_AST",
+          "expected": 500.0,
+          "actual": 5763.0,
+          "error": 5263.0,
+          "error_pct": 1052.6,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "filename": "WRDO5.txt",
+            "engine": "🛠️ WeAreDevs (Prometheus AST Devirtualizer)"
+          },
+          "timestamp": 1790096997.4811137
+        },
+        {
+          "action": "WEAREDEVS_AST",
+          "expected": 500.0,
+          "actual": 13419.0,
+          "error": 12919.0,
+          "error_pct": 2583.8,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "filename": "message.txt",
+            "engine": "🛠️ WeAreDevs (Prometheus AST Devirtualizer)"
+          },
+          "timestamp": 1790176524.9638064
+        }
+      ]
+    },
+    "BASE64_LOADER": {
+      "count": 2,
+      "history": [
+        {
+          "action": "BASE64_LOADER",
+          "expected": 1000.0,
+          "actual": 11303.0,
+          "error": 10303.0,
+          "error_pct": 1030.3,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "filename": "message (17).txt",
+            "engine": "📦 A7DEV / Custom Lua Base64 Loader Unpacker"
+          },
+          "timestamp": 1789996128.4571977
+        },
+        {
+          "action": "BASE64_LOADER",
+          "expected": 1000.0,
+          "actual": 11303.0,
+          "error": 10303.0,
+          "error_pct": 1030.3,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "filename": "message (17).txt",
+            "engine": "📦 A7DEV / Custom Lua Base64 Loader Unpacker"
+          },
+          "timestamp": 1789996173.011105
+        }
+      ]
+    },
+    "TWOK_SECURITY": {
+      "count": 4,
+      "history": [
+        {
+          "action": "TWOK_SECURITY",
+          "expected": 100.0,
+          "actual": 6123.0,
+          "error": 6023.0,
+          "error_pct": 6023.0,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "filename": "message.txt",
+            "engine": "🛡️ 2K Security & XOR Loader"
+          },
+          "timestamp": 1790080488.1704736
+        },
+        {
+          "action": "TWOK_SECURITY",
+          "expected": 100.0,
+          "actual": 1814.0,
+          "error": 1714.0,
+          "error_pct": 1714.0,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "filename": "07370a462dac3f7f.txt",
+            "engine": "🛡️ 2K Security & XOR Loader"
+          },
+          "timestamp": 1790081857.0489557
+        },
+        {
+          "action": "TWOK_SECURITY",
+          "expected": 100.0,
+          "actual": 1814.0,
+          "error": 1714.0,
+          "error_pct": 1714.0,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "filename": "6ef117689c170f7a.txt",
+            "engine": "🛡️ 2K Security & XOR Loader"
+          },
+          "timestamp": 1790081979.3071737
+        },
+        {
+          "action": "TWOK_SECURITY",
+          "expected": 100.0,
+          "actual": 1622.0,
+          "error": 1522.0,
+          "error_pct": 1522.0,
+          "is_success": true,
+          "failure_reason": "",
+          "metadata": {
+            "filename": "Anime_Dice.lua",
+            "engine": "📄 Clean Lua Script (Passthrough) (⚡ สลับอัตโนมัติจาก 🛡️ 2K Security & XOR Loader)"
+          },
+          "timestamp": 1790103402.9446273
+        }
+      ]
+    }
+  },
+  "stats": {
+    "total_decisions": 24,
+    "successful_executions": 21,
+    "failed_executions": 3
+  }
+}

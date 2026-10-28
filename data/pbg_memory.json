@@ -1,0 +1,123 @@
+{
+  "version": "2.0.0",
+  "last_updated": 1791962441.8436174,
+  "operator": {
+    "name": "dj",
+    "role": "Creator & Supreme Commander",
+    "affinity": "Black Cats, Retro RPGs, Cyber-Glassmorphic Aesthetics, Game Dev",
+    "communication_style": "Direct, fast, hates stubs/placeholders, demands production-grade depth and high-frequency visual reports"
+  },
+  "active_projects": {
+    "slayer2": {
+      "name": "Roblox Demon Slayer 2 Script Suite",
+      "status": "Active / In Development",
+      "main_files": [
+        "c:/Users/PayomboyZ/Desktop/Games/Slayer2/auto dodge (1).lua",
+        "c:/Users/PayomboyZ/Desktop/Games/Slayer2/S2Dungeon65.lua",
+        "c:/Users/PayomboyZ/Desktop/Games/Slayer2/slayer2.luau",
+        "c:/Users/PayomboyZ/Desktop/Games/Slayer2/UI Payomboy2.md",
+        "c:/Users/PayomboyZ/Desktop/Games/Slayer2/SCRIPT_PLAY_UI_BLUEPRINT_SPEC.md"
+      ],
+      "key_tech": "Metatable hooking (__namecall, __index), Raycast hitbox prediction, Frame-perfect Auto-Dodge, Dungeon 65 speedrun queue, Custom Obsidian Glassmorphic UI"
+    },
+    "payomboyz_hub": {
+      "name": "PAYOMBØYZ Centralized Script Center & Key Auth",
+      "status": "Active / Production",
+      "urls": [
+        "https://payomboyz-hub.scriptcenter.online/",
+        "https://payomboyz-logs.vercel.app/"
+      ],
+      "key_tech": "In-Game HTTP Bridge (Port 49281), Webhook Telemetry Logs, Role Verification, HWID Whitelist"
+    },
+    "universal_deobfuscator": {
+      "name": "Universal Luau Multi-Engine Deobfuscator",
+      "status": "Active / Core Tool",
+      "main_files": [
+        "universal_deobfuscator.py",
+        "cff_deflattener.py",
+        "polsec_unpacker.py",
+        "luraph_v149_devirt.py"
+      ],
+      "key_tech": "Luraph v14/v15 CFG Dominator, Luarmor 6-Pillar Reconstitution, SCPE String Lifter, MoonSec Stego AST"
+    },
+    "web_cloner": {
+      "name": "Autonomous Web Scraper, Cloner & Domain Deployer",
+      "status": "Active / Expanding",
+      "key_tech": "Headless Chrome CDP (Port 9222), Playwright, Z.com Domain Acquisition, Full Asset Mirroring"
+    }
+  },
+  "learned_insights": [
+    {
+      "date": "2026-10-11",
+      "insight": "dj ออกแบบระบบ Auto Dodge ใน Slayer2 โดยใช้ Raycast + AnimationTrack ID ตรวจจับ Hitbox ทะลวงเฟรม ต้องคำนวณเวกเตอร์แบบ Zero-Latency ห้ามใช้ Thread Sleep นานเกิน 1 เฟรม"
+    },
+    {
+      "date": "2026-10-12",
+      "insight": "dj ต้องการให้ระบบ UI สไตล์ Payomboy2 เป็น Obsidian Glassmorphism รองรับมือถือและพีซี สลับแท็บลื่นไหล ไม่มีอาการตกเฟรม"
+    },
+    {
+      "date": "2026-10-13",
+      "insight": "dj ทดสอบและเปรียบเทียบระบบ Web Cloner กับค่ายคู่แข่ง พบว่าต้องโคลนลึกถึงระดับ Client-Side Scripts, API Endpoints, และโครงสร้าง Asset เพื่อให้รัน Standalone ได้ 100%"
+    },
+    {
+      "date": "2026-10-14",
+      "insight": "dj ต้องการให้ Godmode แยกตัวเป็นอิสระจาก Discord Bot เพราะติดขีดจำกัด 2000 ตัวอักษร และต้องการ WebUI สไตล์สำนักงานแมวดำกึ่งเกม RPG สบายตา พร้อมความจำงานย้อนหลัง 3+ วัน และรายงานภาพบ่อยๆ"
+    }
+  ],
+  "rolling_episodes": [
+    {
+      "date": "2026-10-11",
+      "title": "Dungeon 65 Speedrun & Candy Event Optimization",
+      "summary": "สกัดและปรับปรุงฟังก์ชันขโมยไข่และฟาร์ม Candy อัตโนมัติ ปรับลูปการโจมตีและการตรวจจับระยะมอนสเตอร์ในดันเจี้ยน 65 ให้ผ่านได้ไวที่สุด",
+      "tags": [
+        "Slayer2",
+        "Lua",
+        "Dungeon65",
+        "CandyFarm"
+      ]
+    },
+    {
+      "date": "2026-10-12",
+      "title": "PAYOMBØYZ Monitor Vercel & Script Weblog",
+      "summary": "เชื่อมต่อระบบ Log จากสคริปต์ในเกมขึ้น PayomboyZ Monitor (Vercel) ตรวจจับ HWID การใช้งาน และการเชื่อมต่อผ่าน HTTP Bridge พอร์ต 49281",
+      "tags": [
+        "Vercel",
+        "Monitoring",
+        "Hub",
+        "Bridge49281"
+      ]
+    },
+    {
+      "date": "2026-10-13",
+      "title": "Deep Web Cloner Engine & Z.com Domain Research",
+      "summary": "วิเคราะห์แพ็กเกจโคลนเว็บคู่แข่ง อัปเกรดระบบโคลนเว็บใน output/Cloned_Sites พร้อมเช็คโดเมนบน Z.com สำหรับเตรียมเชื่อมต่อระบบ Hub ลูกค้า",
+      "tags": [
+        "WebClone",
+        "Z.com",
+        "Automation",
+        "ReverseEngineering"
+      ]
+    },
+    {
+      "date": "2026-10-14",
+      "title": "Omnipotent Godmode Core & Black Cat Game-Office WebUI",
+      "summary": "แยกระบบ Godmode สู่ Standalone Service, เชื่อมต่อ Chrome CDP พอร์ต 9222, ระบบภาพ Multimodal สายตาคอมพิวเตอร์, วางระบบ Long-Logic Memory 3+ วัน และเตรียมเปิดตัว WebUI สำนักงานแมวดำ",
+      "tags": [
+        "Godmode",
+        "WebUI",
+        "BlackCat",
+        "CDP",
+        "Vision",
+        "Memory"
+      ]
+    },
+    {
+      "date": "2026-10-14",
+      "title": "Visual Dashboard Integration",
+      "summary": "Successfully mapped 27 cats to monitoring roles and implemented RPG HUD for telemetry",
+      "tags": [
+        "Task"
+      ]
+    }
+  ]
+}

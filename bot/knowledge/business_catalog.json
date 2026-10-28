@@ -1,0 +1,62 @@
+{
+  "pricing": {
+    "vip_package": {
+      "name": "VIP Package",
+      "price_thb": 89,
+      "duration": "3 months",
+      "has_free_key": true,
+      "maps": [
+        "Capybara Vs Plant",
+        "Anime Card Farm",
+        "Attack On Titan Revolution (AOTR)",
+        "Arena Sniper",
+        "Gakuran",
+        "99Nights at the forest",
+        "Grow a Chicken FIGHTER!",
+        "Steal An Anime Egg",
+        "Greedy Grower",
+        "Blox Fruit",
+        "Ride A Pet"
+      ]
+    },
+    "vvip_package": {
+      "name": "VVIP Package",
+      "price_thb": 129,
+      "duration": "3 months",
+      "has_free_key": false,
+      "includes_vip_maps": true,
+      "maps": [
+        "Roll Anime To Fight",
+        "Mine a Mountain",
+        "Murder Mystery 2 (MM2)",
+        "Steal An Egg (ขโมยไข่)",
+        "Anime Expedetion (AE)",
+        "Iron Soul: Dungeon",
+        "Anime Dice"
+      ]
+    }
+  },
+  "urls": {
+    "official_store": "https://payomboyz.rexzy.xyz/",
+    "free_key_portal": "https://payomboyz333.github.io/Anime-Card-Farm/",
+    "free_scripts_channel": "〔🆓〕・สคริปฟรี"
+  },
+  "policies": [
+    {
+      "topic": "No Key Sharing",
+      "rule": "1 คีย์ต่อ 1 คนเท่านั้น ห้ามหารหรือแจกจ่ายคีย์ ระบบตรวจสอบพบจะระงับคีย์ทันทีโดยไม่มีการคืนเงิน"
+    },
+    {
+      "topic": "Risk & Ban Responsibility",
+      "rule": "การรันสคริปต์มีความเสี่ยงต่อระบบตรวจจับของ Roblox ผู้ใช้ต้องยอมรับความเสี่ยงด้วยตนเอง แนะนำให้ใช้รหัสสำรอง (ไก่ตัน) เสมอ"
+    },
+    {
+      "topic": "No Reverse Engineering or Leaking",
+      "rule": "ห้ามแกะโค้ด ดัดแปลง UI หรือ bypass สคริปต์ของทางร้านเพื่อแจกจ่าย พบเจอดำเนินการแบน Blacklist ถาวร"
+    },
+    {
+      "topic": "Refund Policy",
+      "rule": "No Refund เมื่อชำระเงินและรับคีย์แล้วไม่สามารถขอคืนเงินหรือเปลี่ยนคีย์ได้ทุกกรณี เว้นแต่เป็นข้อผิดพลาดจากระบบของทางร้านเอง"
+    }
+  ]
+}

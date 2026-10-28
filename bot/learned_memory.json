@@ -1,0 +1,349 @@
+{
+  "maps": {},
+  "remotes": {},
+  "user_rules": {},
+  "last_updated": 1792256080.7635107,
+  "reversed_scripts": {
+    "Flee-the-Facility-Free-and-Keyless-SelfCode.cc-V1-231641": {
+      "data": {
+        "title": "Free & Keyless SelfCode.cc V1",
+        "game": "Flee the Facility 🎮",
+        "lines": 4798,
+        "score": 73.6,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792197659.3431554
+    },
+    "RIVALS-NaikoGui-ESP-Safe-With-HealthBar-No-Ban-165617": {
+      "data": {
+        "title": "Rival [Safe] ESP Rainbow Aura | Team Check [Mobile/Pc]",
+        "game": "Rivals 🎯 — FPS 1v1 / Ranked",
+        "lines": 93,
+        "score": 68.7,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792199219.171032
+    },
+    "Universal-Script-Gravel-240724": {
+      "data": {
+        "title": "Gravel",
+        "game": "Universal Script 📌 🎮",
+        "lines": 658,
+        "score": 71.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792199528.2504675
+    },
+    "TLK-Prison-BETA-TESTER-241176": {
+      "data": {
+        "title": "ZETHUB |",
+        "game": "TLK Prison 🎮",
+        "lines": 3,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792200448.4265366
+    },
+    "Murder-Mystery-2-Project-Stark-or-MM2-231379": {
+      "data": {
+        "title": "Project Stark | Free",
+        "game": "Murder Mystery 2 🔪 — Classic Horror",
+        "lines": 98,
+        "score": 60.1,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792205717.825476
+    },
+    "Universal-Script-Roblox-Asset-Loading-Tracker-35214": {
+      "data": {
+        "title": "Roblox Asset Loading Tracker",
+        "game": "Universal Script 📌 🎮",
+        "lines": 929,
+        "score": 72.8,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792206026.2521513
+    },
+    "King-Legacy-Autofarm-Lvl-And-PVP-Mod-211106": {
+      "data": {
+        "title": "Autofarm Lvl And PVP Mod",
+        "game": "King Legacy 🎮",
+        "lines": 746,
+        "score": 73.1,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792219588.8536446
+    },
+    "RIVALS-Esp-Script-Universal-229092": {
+      "data": {
+        "title": "Esp Script Universal",
+        "game": "Rivals 🎯 — FPS 1v1 / Ranked",
+        "lines": 1,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792220229.9194283
+    },
+    "Universal-Script-Environment-Controller-223650": {
+      "data": {
+        "title": "Environment Controller | Lighting | Graphics + More",
+        "game": "Universal Script 📌 🎮",
+        "lines": 83,
+        "score": 68.5,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792222991.4358964
+    },
+    "Build-A-Boat-For-Treasure-Universal-Obj-to-Build-converter-245895": {
+      "data": {
+        "title": "Universal Obj to Build converter",
+        "game": "Build A Boat For Treasure 🎮",
+        "lines": 1,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792224147.3548357
+    },
+    "Heavyweight-Fishing-Best-OP-Auto-Fish-Auto-Sell-Auto-Bait-Auto-Skill-Boss-232018": {
+      "data": {
+        "title": "Best OP Auto Fish Auto Sell Auto Bait Auto Skill Boss",
+        "game": "Fisch 🎣 — Moosewood",
+        "lines": 157,
+        "score": 72.3,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792227858.725201
+    },
+    "Universal-Script-SU-Hub-39569": {
+      "data": {
+        "title": "SU Hub | Basic",
+        "game": "Universal Script 📌 🎮",
+        "lines": 3,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792228907.4834552
+    },
+    "Universal-Script-Knight's-Avatar-Copier-and-Saver-V2-with-Item-Inspector-Free-226882": {
+      "data": {
+        "title": "Knight's Avatar Saver & Explorer V2 [FREE, KEYLESS, NO KEY].",
+        "game": "Universal Script 📌 🎮",
+        "lines": 1,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792230761.9074712
+    },
+    "Fright-Fighters-Infinite-stamina-232016": {
+      "data": {
+        "title": "Infinite stamina",
+        "game": "🎃Fright Fighters 🎮",
+        "lines": 14,
+        "score": 63.6,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792231554.118331
+    },
+    "1-Stone-Skipping-Fastest-Autofarm-Full-Game-Autofarm-232012": {
+      "data": {
+        "title": "Fastest Autofarm Full Game Autofarm",
+        "game": "Blade Ball ⚔️ (Auto-Parry & Curved Deflect)",
+        "lines": 36,
+        "score": 63.1,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792237636.8918347
+    },
+    "WEEK-2-Forsaken-Staminia-Customizer-227001": {
+      "data": {
+        "title": "Staminia Customizer",
+        "game": "Forsaken 🎮",
+        "lines": 1,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792238132.9869444
+    },
+    "Steal-An-Egg-Auto-carry-best-value-Auto-carry-best-weight-ESP-Eggs-227182": {
+      "data": {
+        "title": "Auto carry best value Auto carry best weight ESP Eggs",
+        "game": "Blade Ball ⚔️ (Auto-Parry & Curved Deflect)",
+        "lines": 1,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792238623.8494854
+    },
+    "Steal-An-Egg-OP-Auto-Steal-Auto-Hatch-Egg-ESP-232076": {
+      "data": {
+        "title": "OP Auto Steal + Auto Hatch + Egg ESP",
+        "game": "Blade Ball ⚔️ (Auto-Parry & Curved Deflect)",
+        "lines": 1,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792239103.8472188
+    },
+    "Universal-Script-Arcane-Hub-or-100-Games-and-2000-Features-232142": {
+      "data": {
+        "title": "Arcane Hub | 100+ Games & 2000+ Features",
+        "game": "Blade Ball ⚔️ (Auto-Parry & Curved Deflect)",
+        "lines": 1,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792239518.2438085
+    },
+    "Steal-An-Egg-Insta-Teleport-Steal-divine-secret-and-more-229612": {
+      "data": {
+        "title": "[KEYLESS] Insta Teleport Steal divine secret and more",
+        "game": "Universal (ทุกแมพ — Movement & Character Exploit) 🌐",
+        "lines": 49,
+        "score": 62.6,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792239923.0227125
+    },
+    "Universal-Script-Bankroll-Hub-BEST-HUB-242566": {
+      "data": {
+        "title": "Bankroll Hub | BEST HUB 5+ games aimbot, universal, auto",
+        "game": "Universal Hub / ไม่ระบุแมพเจาะจง 🌐",
+        "lines": 1,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792241958.1141944
+    },
+    "UPD-7-Anime-Dice-NEW-KEYLESS-SCRIPT-FULL-AUTO-231672": {
+      "data": {
+        "title": "NEW KEYLESS SCRIPT FULL AUTO",
+        "game": "[🎉 UPD 7] Anime Dice 🎮",
+        "lines": 1,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792245945.1205802
+    },
+    "Unnamed-Shooter-Silent-Aim-keyless-57145": {
+      "data": {
+        "title": "Silent Aim + esp keyless",
+        "game": "Unnamed Shooter 🎮",
+        "lines": 1,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792246367.5198703
+    },
+    "Ride-A-Pet-BEST-FREE-NEW-SCRIPT-232073": {
+      "data": {
+        "title": "[CANDY] BEST FREE NEW SCRIPT",
+        "game": "[🎃EVENT] Ride A Pet 🎮",
+        "lines": 1,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792246735.8287017
+    },
+    "Ride-A-Pet-Auto-Farm-Eggs-or-Auto-Farm-Best-or-Auto-Sell-or-BEST-SCRIPT-228476": {
+      "data": {
+        "title": "AUTO FARM | FUSE | VOLCANO l AUTO PLACE, FEED, HATCH & BUY |",
+        "game": "[🎃EVENT] Ride A Pet 🎮",
+        "lines": 1,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792247178.0413952
+    },
+    "Break-and-Steal-an-Egg-Serenity-Hub-greater-INSTANT-STEAL-DEMON-EVENT-AUTO-BUY!-ETC-231865": {
+      "data": {
+        "title": "Serenity Hub > INSTANT STEAL, DEMON EVENT, AUTO BUY!, ETC",
+        "game": "Break and Steal an Egg 🎮",
+        "lines": 1,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792248001.6005416
+    },
+    "Fisch-Blackhub-Best-Undetected-Script-53591": {
+      "data": {
+        "title": "Blackhub Update",
+        "game": "Fisch 🎣 — Moosewood",
+        "lines": 1,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792248763.7273343
+    },
+    "Universal-Script-Lumin-Hub-81656": {
+      "data": {
+        "title": "Lumin Hub | #1 | Insta Steal",
+        "game": "Universal Hub / ไม่ระบุแมพเจาะจง 🌐",
+        "lines": 1,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792250471.2509925
+    },
+    "King-Legacy-Kazu-Hub-or-Auto-Farm-Sea-Events-Dungeons-and-Smart-Hop-230398": {
+      "data": {
+        "title": "Kazu Hub | Auto Farm, Sea Events, Dungeons & Smart Hop",
+        "game": "Blade Ball ⚔️ (Auto-Parry & Curved Deflect)",
+        "lines": 1,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792250842.3933465
+    },
+    "Steal-An-Egg-Best-OP-Auto-Steal-Egg-Auto-Hatch-Auto-Sell-Auto-DNA-Steal-223768": {
+      "data": {
+        "title": "Best OP Auto Steal Egg Auto Hatch Auto Sell Auto DNA Steal",
+        "game": "Blade Ball ⚔️ (Auto-Parry & Curved Deflect)",
+        "lines": 1,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792255326.2481692
+    },
+    "Steal-An-Egg-Instant-Steal-Fastest-autofarm-Everything-autofarm-223695": {
+      "data": {
+        "title": "Instant Steal Fastest autofarm Everything autofarm",
+        "game": "Blade Ball ⚔️ (Auto-Parry & Curved Deflect)",
+        "lines": 1,
+        "score": 60.0,
+        "needs_review": true,
+        "date": "20261017"
+      },
+      "timestamp": 1792256080.7635107
+    }
+  }
+}
