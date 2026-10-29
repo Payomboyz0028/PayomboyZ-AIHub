@@ -250,22 +250,6 @@ class HybridAIRouter:
             "ขอแนะนำให้",
             "ควรระมัดระวัง",
             "อาจส่งผลเสีย",
-
-            # ThaiLLM Preachy / Moralizing / Dictionary lectures
-            "สัตว์ที่มีบทบาท",
-            "ไม่ใช่เรื่องไร้สาระ",
-            "เนื้อหาที่ไม่สร้างสรรค์",
-            "เน้นที่การช่วยเหลือด้านเทคนิคและการสร้างสรรค์",
-            "เน้นที่การช่วยเหลือ",
-            "ไม่เหมาะสม",
-            "คำไม่สุภาพ",
-            "การใช้ภาษาที่สุภาพ",
-            "โปรดใช้ถ้อยคำที่สุภาพ",
-            "โปรดใช้ภาษาที่สุภาพ",
-            "โปรดรักษามารยาท",
-            "ไม่สนับสนุนการใช้คำหยาบ",
-            "ไม่สามารถตอบสนองต่อคำหยาบคาย",
-            "ไม่ส่งเสริมการใช้ภาษาที่ไม่สุภาพ",
         )
         return any(phrase in lowered for phrase in refusal_phrases)
 
@@ -378,39 +362,8 @@ class HybridAIRouter:
 
 
 
-            # 4. Register Official DeepSeek Reserve Workers (non-OR keys only)
-
-            ds_keys = getattr(config, "DEEPSEEK_API_KEYS", [])
-
-            ds_base = getattr(config, "DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-
-            ds_model = getattr(config, "DEEPSEEK_MODEL", "deepseek-chat")
-
-            bluezy_key_set = set(bluezy_keys)
-
-
-
-            for idx, k in enumerate(ds_keys):
-
-                if k and k.strip() and not k.startswith("sk-or-v1-") and k.strip() not in bluezy_key_set:
-
-                    self.workers.append(
-
-                        AIWorker(
-
-                            provider="deepseek",
-
-                            key=k.strip(),
-
-                            name=f"DeepSeek-Official-{idx+1}",
-
-                            base_url=ds_base,
-
-                            default_model=ds_model
-
-                        )
-
-                    )
+            # 4. Official DeepSeek Paid Workers permanently disabled per dj (100% Free Providers only)
+            # All tasks route via Gemini (18,000 req/day), OpenRouter Free (400 req/day), Bluezy, or ThaiLLM
 
 
 
@@ -785,7 +738,8 @@ class HybridAIRouter:
                     data = resp.json()
                     choices = data.get("choices", [])
                     if choices and "message" in choices[0]:
-                        content = choices[0]["message"].get("content", "")
+                        msg = choices[0]["message"]
+                        content = msg.get("content") or msg.get("reasoning") or ""
                         if content and content.strip():
                             if "</think>" in content:
                                 content = content.split("</think>", 1)[1].strip()
@@ -817,7 +771,8 @@ class HybridAIRouter:
                     data = resp.json()
                     choices = data.get("choices", [])
                     if choices and "message" in choices[0]:
-                        content = choices[0]["message"].get("content", "")
+                        msg = choices[0]["message"]
+                        content = msg.get("content") or msg.get("reasoning") or ""
                         if content and content.strip():
                             # Clean out reasoning/thinking block if present
                             if "</think>" in content:
@@ -1075,13 +1030,6 @@ class HybridAIRouter:
     ) -> str:
 
         """ThaiLLM sees every request; one role-matched model supplies the answer."""
-        # Fast-path for general chat / direct conversation:
-        # Route directly to Gemini (or OpenRouter if Gemini unavailable). Zero delay, zero preachy ThaiLLM refusals.
-        if mode == "general_chat" and not self.is_script_request(user_request) and not self.is_obfuscation_request(user_request) and not self.is_thai_customer_service_request(user_request):
-            gemini_avail = any(w.is_available for w in self.workers if w.provider == "gemini")
-            if gemini_avail:
-                print(f"[AI ROUTER] Fast-path routing general chat/banter directly to Gemini.", flush=True)
-                return "gemini"
         fallback = self.deterministic_route(user_request, mode, source_chars)
         explicit = (preferred_provider or "").casefold().strip()
         provider_hint = {
@@ -1099,7 +1047,7 @@ class HybridAIRouter:
             "Routing roles: openrouter for ALL script/code questions, Roblox/Luau scripts, executors, auto farm, "
             "implementation, debugging, TP, anti-cheat, and architecture; deepseek for obfuscating or "
             "deobfuscating supplied code (especially WeAreDevs, Moonveil, Base64, and PAYOMBOYZ OBF); "
-            "gemini for general knowledge, conversation, banter, chit-chat, planning, and business advice; thaillm "
+            "gemini for general knowledge, planning, and business advice; thaillm "
             "for Thai customer service about products, prices, orders, delivery, payment, returns, or "
             "complaints. For ambiguous technical questions choose openrouter. Sexual/nudity requests are locally blocked.\n"
             f"Optional provider preference={provider_hint or 'none'}; use it only if it fits the task.\n"
@@ -1214,9 +1162,6 @@ class HybridAIRouter:
             return "gemini" if gemini_avail else ("openrouter" if or_avail else ("bluezygpt" if bluezy_avail else suggested))
         if self.is_thai_customer_service_request(text):
             return "thaillm"
-        # ThaiLLM must NEVER be assigned to general chat, banter, slang, or general coding
-        if suggested == "thaillm":
-            return "gemini" if gemini_avail else ("openrouter" if or_avail else suggested)
         return suggested
 
     @staticmethod
@@ -1617,11 +1562,7 @@ class HybridAIRouter:
 
 
         # Multi-tier responder pools: Primary -> Standard pools -> Local PoW -> Group 3 Free Providers -> g4f Infinite
-        # General chat isolates from thaillm so moralizing preachy government filters never touch chat
-        if mode == "general_chat":
-            base_pools = [selected] + [name for name in ("gemini", "openrouter", "deepseek", "bluezygpt") if name != selected]
-        else:
-            base_pools = [selected] + [name for name in ("gemini", "openrouter", "deepseek", "bluezygpt", "thaillm") if name != selected]
+        base_pools = [selected] + [name for name in ("gemini", "thaillm", "openrouter", "deepseek", "bluezygpt") if name != selected]
         extra_pools = ["deepseek_pow", "groq", "sambanova", "cerebras", "g4f"]
         provider_order = base_pools + [p for p in extra_pools if p not in base_pools]
 
@@ -1634,10 +1575,7 @@ class HybridAIRouter:
                 # ── Refusal Auto-Retry: if model returned a refusal, discard and escalate ──
                 if self.is_refusal_response(reply_text):
                     print(f"[AI ROUTER] ⚠️ Provider '{provider}' returned a refusal — discarding and escalating to rescue providers.", flush=True)
-                    rescue_pool = ["gemini", "openrouter", "deepseek", "deepseek_pow", "g4f"]
-                    if mode != "general_chat":
-                        rescue_pool.append("thaillm")
-                    for rescue_provider in rescue_pool:
+                    for rescue_provider in ["openrouter", "thaillm", "deepseek", "deepseek_pow", "g4f"]:
                         if rescue_provider == provider:
                             continue
                         rescue_system_prompt = self._provider_system_prompt(rescue_provider, system_prompt, mode=mode, user_request=user_request)

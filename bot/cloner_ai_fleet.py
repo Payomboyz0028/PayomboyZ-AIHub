@@ -67,7 +67,6 @@ def _load_fleet_keys(prefix: str) -> List[str]:
 
 CLONER_GEMINI_KEYS: List[str] = _load_fleet_keys("CLONER_GEMINI") or _load_fleet_keys("GEMINI")
 CLONER_BLUEZY_KEYS: List[str] = _load_fleet_keys("CLONER_BLUEZY") or _load_fleet_keys("BLUEZY")
-CLONER_DEEPSEEK_KEYS: List[str] = _load_fleet_keys("CLONER_DEEPSEEK") or _load_fleet_keys("DEEPSEEK")
 CLONER_OPENROUTER_KEYS: List[str] = _load_fleet_keys("CLONER_OPENROUTER") or _load_fleet_keys("OPENROUTER")
 
 # Guarantee primary OpenRouter key from environment is always front of rotation
@@ -78,7 +77,6 @@ if DJ_OPENROUTER_PRIMARY and DJ_OPENROUTER_PRIMARY not in CLONER_OPENROUTER_KEYS
 BLUEZY_BASE_URL: str = os.getenv("CLONER_BLUEZY_BASE_URL", os.getenv("BLUEZY_BASE_URL", "https://bluezygpt.space/api/v1"))
 BLUEZY_MODEL: str = os.getenv("CLONER_BLUEZY_MODEL", "bluezygpt-free")
 
-DEEPSEEK_BASE_URL: str = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 OPENROUTER_BASE_URL: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 
 # OpenRouter Free Models Priority (Active 0-cost, High Capacity)
@@ -113,7 +111,6 @@ class ClonerAIClient:
         self._lock = threading.Lock()
         self._gemini_idx = 0
         self._bluezy_idx = 0
-        self._deepseek_idx = 0
         self._openrouter_idx = 0
         self._bluezy_cooldown_until = 0.0
         self._openrouter_cooldown_until = 0.0
