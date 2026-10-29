@@ -143,10 +143,13 @@ class MultiAgentScriptFactory:
             line_count = len(authentic_script.splitlines())
             print(f"[SCRIPT FACTORY] Serving authentic production script for '{game_name}' ({len(authentic_script):,} chars, {line_count:,} lines).", flush=True)
             chat_summary = (
-                f"ดึงสคริปต์ตัวจริงของ **{game_name}** มาให้เรียบร้อยแล้วครับ! "
-                f"เป็นสคริปต์โปรดักชันขนาดใหญ่ระดับตำนาน ({line_count:,} บรรทัด) "
-                f"เจาะลึกฟังก์ชันเกม, Remotes, ระบบฟาร์มเฉพาะทาง, และ UI ครบวงจร "
-                f"โค้ดพร้อมรันบน Executor ตัวเต็มแนบไว้ในไฟล์ .lua ด้านล่างแล้วครับ"
+                f"จัดไปดิเพื่อน! สำหรับแมพ **{game_name}** รอบนี้กูจัดสคริปต์ระดับเทพมาให้แบบคอมพลีทเวอร์ชัน "
+                f"เจาะลึกฟังก์ชันเกม ลูปออโต้ครบถ้วนตามสั่ง ทั้งระบบต่อสู้, หาเป้าหมาย, เคลื่อนที่, Remotes อัตโนมัติ "
+                f"และ UI ครบวงจร สคริปต์ความยาว ({line_count:,} บรรทัด) พร้อมรันบน Executor ทั้ง PC และมือถือได้เลย!\n\n"
+                f"**📖 คำแนะนำและวิธีการใช้งาน:**\n"
+                f"1. ก็อปปี้โค้ดในกล่องด้านล่างนี้ หรือดาวน์โหลดไฟล์ `.luau` ไปรันใน Executor (Delta, Codex, Wave, Solara, Synapse)\n"
+                f"2. เปิดเมนู UI ขึ้นมา แล้วเลือกเปิดฟังก์ชันที่ต้องการ (Auto Farm, Combat, Movement)\n"
+                f"3. ปรับแต่งค่าความเร็วหรือระยะตามต้องการในเมนู Settings ได้ทันที"
             )
             return {
                 "chat_summary": chat_summary,

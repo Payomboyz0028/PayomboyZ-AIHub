@@ -303,12 +303,9 @@ class IntentRouter:
         if preferred_provider and preferred_provider != "auto":
             return preferred_provider
 
-        # Script, executor, game mechanics -> OpenRouter (DeepSeek)
-        if mode in ("script_professor", "software_engineering"):
-            return "openrouter"
-        # Deobfuscation, RE, memory tools, Web Clone -> OpenRouter / Gemini
-        if mode in ("deobfuscate", "obfuscate", "reverse_engineering", "web_clone"):
-            return "openrouter"
+        # High-Speed Gemini Engine with fallback to DeepSeek / ThaiLLM
+        if mode in ("script_professor", "software_engineering", "deobfuscate", "obfuscate", "reverse_engineering", "web_clone"):
+            return "gemini"
         # Discord bot, general chat -> Gemini
         return "gemini"
 

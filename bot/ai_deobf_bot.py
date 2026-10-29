@@ -2629,16 +2629,44 @@ async def _handle_ai_message(message: discord.Message):
     # Check if this user clicked Deobfuscate / Obfuscate on the panel recently
     from bot.deobf_panel import ACTIVE_PANEL_SESSIONS, OpenConfigModalView
     panel_sess = ACTIVE_PANEL_SESSIONS.get(message.author.id)
-    if panel_sess and (time.time() - panel_sess.get("timestamp", 0) < 300):
-        att = message.attachments[0] if message.attachments else None
-        code_text = message.content.strip() if not att else None
+    if panel_sess and (time.time() - panel_sess.get("timestamp", 0) > 120):
+        ACTIVE_PANEL_SESSIONS.pop(message.author.id, None)
+        panel_sess = None
 
-        if att or (code_text and len(code_text) >= 10):
+    if panel_sess:
+        sess_channel = panel_sess.get("channel_id")
+        att = message.attachments[0] if message.attachments else None
+        code_text = message.content.strip() if not att else ""
+
+        is_ai_script_chan = (
+            message.channel.id == 1550220801297490061
+            or is_ai_channel
+            or "ai-สร้างสคริป" in getattr(message.channel, "name", "").lower()
+        )
+        is_chat_or_request = any(w in message.content.lower() for w in [
+            "ทำสคริป", "สร้างสคริป", "ขอสคริป", "เขียนสคริป", "สคริปต์", "สคริป",
+            "ให้หน่อย", "ให้ที", "สอน", "ช่วย", "ออโต้", "ฟาร์ม", "ฟาม", "fly", "speed",
+            "แมพ", "เกม", "สวัสดี", "ไง", "ทำไง", "ได้ไหม"
+        ])
+
+        is_valid_script_payload = False
+        if att:
+            is_valid_script_payload = True
+        elif code_text and not is_chat_or_request:
+            has_codeblock = "```" in code_text and len(code_text) >= 25
+            has_strong_lua = any(t in code_text for t in [
+                "function(", "function ", "local ", "game:GetService",
+                "loadstring(", "require(", "getgenv()", "setclipboard(",
+                r"\x", r"\u", "LPH_", "ll1", "String.fromCharCode"
+            ]) and len(code_text) >= 40
+            if has_codeblock or has_strong_lua:
+                is_valid_script_payload = True
+
+        if sess_channel == message.channel.id and is_valid_script_payload and not (is_ai_script_chan and not att):
             ACTIVE_PANEL_SESSIONS.pop(message.author.id, None)
             mode = panel_sess.get("mode", "deobf")
             filename = att.filename if att else "Script.lua"
 
-            # Buffer raw bytes into memory immediately BEFORE deleting message
             raw_bytes = None
             if att:
                 try:
@@ -2675,6 +2703,8 @@ async def _handle_ai_message(message: discord.Message):
                 print(f"[PANEL] User message delete skipped: {del_err}", flush=True)
             await message.channel.send(embed=embed, view=view)
             return
+        elif is_chat_or_request or (sess_channel != message.channel.id):
+            ACTIVE_PANEL_SESSIONS.pop(message.author.id, None)
 
     # Dedicated drop channel gate: files and scripts only, NEVER conversational AI!
     if dedicated_mode:
@@ -3635,7 +3665,8 @@ async def _handle_ai_message(message: discord.Message):
     is_explicit_deob_cmd = any(w in lowered_content for w in ["แกะ", "ถอด", "deob", "unobf", "unpack", "ถอดรหัส"])
     has_attachment_to_deobf = bool(attached_code_text and len(attached_code_text.strip()) > 50 and is_explicit_deob_cmd)
     is_full_script_creation = bool(
-        (
+        roblox_game_info
+        and (
             is_ai_script_channel
             or any(w in lowered_content for w in [
                 "สร้างสคริป roblox", "ทำสคริป roblox", "สคริปต์เต็มระบบ", "สคริปเต็มระบบ", "ขอสคริป roblox",
@@ -3643,7 +3674,6 @@ async def _handle_ai_message(message: discord.Message):
                 "auto farm", "ออโต้ฟาร์ม", "ออโต้ฟาม", "ฟามออโต้", "ฟาร์มออโต้", "autofarm", "ฟาร์ม", "ฟาม"
             ])
         )
-        and (roblox_game_info or user_explicitly_mentions_roblox)
         and not has_attachment_to_deobf
     )
 
@@ -3759,12 +3789,12 @@ async def _handle_ai_message(message: discord.Message):
             # If long, display a clean 25-line preview box + attach complete .luau file.
             clean_intro = chat_text.replace(MANDATORY_SCRIPT_DISCLAIMER, "").strip() if chat_text else ""
 
-            if len(extracted_lua) <= 900:
+            if len(extracted_lua) <= 3500:
                 code_box = "```lua\n" + extracted_lua.strip() + "\n```"
                 content_parts = [p for p in [clean_intro, code_box] if p]
                 full_chat = "\n\n".join(content_parts)
             else:
-                preview_lines = [l for l in extracted_lua.splitlines() if l.strip()][:25]
+                preview_lines = [l for l in extracted_lua.splitlines() if l.strip()][:50]
                 preview_content = "\n".join(preview_lines).strip()
                 preview_box = (
                     "```lua\n" + preview_content + "\n\n"

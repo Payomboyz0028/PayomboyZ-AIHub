@@ -1170,10 +1170,10 @@ class HybridAIRouter:
         or_avail = any(w.is_available for w in self.workers if w.provider == "openrouter")
         gemini_avail = any(w.is_available for w in self.workers if w.provider == "gemini")
         if mode in {"deobfuscate", "obfuscate"} or self.is_obfuscation_request(text):
-            return "openrouter" if or_avail else ("gemini" if gemini_avail else suggested)
-        # Script/Roblox/executor requests MUST go to BluezyGPT (uncensored) first
+            return "gemini" if gemini_avail else ("openrouter" if or_avail else suggested)
+        # High-Speed Roblox script generation via Gemini with OpenRouter/Bluezy fallback
         if mode in ("script_professor", "script") or self.is_script_request(text):
-            return "openrouter" if or_avail else ("gemini" if gemini_avail else ("bluezygpt" if bluezy_avail else suggested))
+            return "gemini" if gemini_avail else ("openrouter" if or_avail else ("bluezygpt" if bluezy_avail else suggested))
         if self.is_thai_customer_service_request(text):
             return "thaillm"
         # ThaiLLM must NEVER be assigned to general chat, banter, slang, or general coding
