@@ -180,10 +180,20 @@ class ShardedSynthesisEngine:
                 f"ระบบ Maid/Janitor cleanup, และ Event listener รองรับ CharacterAdded ตอนตายเกิดใหม่ 100%."
             ),
             3: (
-                f"คุณคือ Senior Network Reverse Engineer ให้เขียนเฉพาะ [SHARD 3: VERIFIED REMOTE ADAPTER] "
-                f"โดยยึด Ground-Truth Map Contract ด้านล่างนี้เป็นสัจธรรม ห้ามมั่วชื่อ Remote เด็ดขาด:\n"
-                f"```json\n{map_contract_text[:4000]}\n```\n"
-                f"เขียนฟังก์ชั่นเรียก Remote พร้อมระบบ Debounce, Rate-Limit และ pcall ป้องกันเกมเตะ 100%."
+                (
+                    f"คุณคือ Senior Network Reverse Engineer ให้เขียนเฉพาะ [SHARD 3: VERIFIED REMOTE ADAPTER] "
+                    f"โดยยึด Ground-Truth Map Contract ด้านล่างนี้เป็นสัจธรรม ห้ามมั่วชื่อ Remote เด็ดขาด:\n"
+                    f"```json\n{map_contract_text[:4000]}\n```\n"
+                    f"เขียนฟังก์ชั่นเรียก Remote พร้อมระบบ Debounce, Rate-Limit และ pcall ป้องกันเกมเตะ 100%."
+                )
+                if (map_contract_text and "VerifiedRemotes" in map_contract_text and len(map_contract_text) > 40)
+                else (
+                    f"คุณคือ Senior Network Reverse Engineer ให้เขียนเฉพาะ [SHARD 3: AUTONOMOUS DYNAMIC REMOTE ADAPTER] "
+                    f"เนื่องจากไม่มี Map Dump ผู้ใช้ขอสร้างสคริปต์สด ห้ามเดาสุ่มชื่อ Remote มั่วเด็ดขาด! "
+                    f"ให้สร้างฟังก์ชัน findRemote(keywords) ค้นหา RemoteEvent/RemoteFunction จาก ReplicatedStorage และ Workspace แบบ Realtime ที่รันไทม์ "
+                    f"โดยสแกนคำค้นหา เช่น 'attack', 'hit', 'combat', 'damage', 'punch', 'swing', 'fight', 'skill', 'collect', 'quest', 'buy' "
+                    f"พร้อมพิมพ์ Remotes ที่ค้นพบออกหน้าต่าง Console และมี fallback สั่ง Tool:Activate() กับ firetouchinterest หากไม่พบ Remote."
+                )
             ),
             4: (
                 f"คุณคือ Senior Exploit Features Engineer ให้เขียนเฉพาะ [SHARD 4: GAMEPLAY AUTOMATION CORE] "

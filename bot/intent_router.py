@@ -122,14 +122,14 @@ SCRIPT_KEYWORDS = [
     "da hood", "blade ball", "rivals", "blockman",
     "bloxd", "prr", "power routing", "prison",
     "jailbreak", "grow garden", "growgarden",
-    "blockman go", "bmgo", "bmc", "roblox",
+    "blockman go", "bmgo", "bmc", "roblox", "steel fighters", "steelfighters", "steel fighter",
 
     # 6. Explicit Thai Roblox Patterns
     "เขียนสคริป roblox", "เขียนสคริปต์ roblox", "เขียน lua", "เขียน luau",
     "ทำสคริป roblox", "ทำสคริปต์ roblox", "ทำ lua", "ทำ luau",
     "แก้ script roblox", "แก้สคริป roblox",
     "lua script", "luau script", "roblox script",
-    "สคริปต์ roblox", "สคริป roblox", "โปรแมพ", "windui", "fluent ui", "maclib",
+    "สคริปต์ roblox", "สคริป roblox", "โปรแมพ", "windui", "fluent ui", "maclib", "ฟามออโต้", "ออโต้ฟาม", "ฟาร์มออโต้", "ออโต้ฟาร์ม", "ฟาร์ม", "ฟาม", "สคริปต์", "สคริป", "ตีมอน", "ออโต้เควส", "ขอสคริป", "สร้างสคริป",
 
     # 7. Common Exploit Terms
     "bypas", "bypasss", "bypass",
@@ -146,7 +146,7 @@ EXPLICIT_SCRIPT_PATTERNS = [
     r"(?:^|\s)(?:auto(?:\s|-)?(?:farm|steal|click|sell|buy|hatch|rebirth|roll|equip|fish|craft|battle|grind)|autofarm|autosteal|windui|maclib|fluent\s+ui|roblox\s+script)\b",
     r"(?:^|\s)(?:สคริป|โปรแมพ|lua|luau)\s*(?:roblox|รัน\s*บน|executor|solara|wave|delta|synapse)\b",
     r"(?:^|\s|[\(\[\{,;])(?:ช่วย|ขอ|ทำ|ทำให้|เขียน|เขียนให้|ทำให้ที|ให้หน่อย|ให้ด้วย)\s*(?:auto\s*farm|ออโต้ฟาร์ม|สคริปต์\s*roblox|สคริป\s*roblox|โปรแมพ|noclip|esp\s*roblox|teleport\s*roblox|ขโมยไข่|steal\s*egg)\b",
-    r"(?:steal(?:\s+an|\s+anime)?\s+egg|steal(?:\s+a)?\s+brainrot|mm2|blox\s+fruit|fisch|rivals|da\s+hood|blade\s+ball)"
+    r"(?:steal(?:\s+an|\s+anime)?\s+egg|steal(?:\s+a)?\s+brainrot|mm2|blox\s+fruit|fisch|rivals|da\s+hood|blade\s+ball|steel\s*fighters?|ฟามออโต้|ออโต้ฟาม|ฟาร์มออโต้|ออโต้ฟาร์ม)"
 ]
 
 

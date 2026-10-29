@@ -78,6 +78,7 @@ class MCIIngestionEngine:
     SCRIPT_CREATION_TRIGGERS = [
         "เขียน", "สร้าง", "ทำสคริป", "ทำสคริปต์", "เขียนสคริป", "เขียนสคริปต์",
         "ขอสคริป", "ขอสคริปต์", "ออโต้ฟาร์ม", "autofarm", "auto farm", "auto steal",
+        "ฟามออโต้", "ออโต้ฟาม", "ฟาร์มออโต้", "ฟาร์ม", "ฟาม", "สคริป", "สคริปต์", "บอทฟาร์ม",
         "esp", "aimbot", "fly", "speed", "noclip", "teleport", "วาร์ป", "ตีมอน",
         "ฟาร์ม", "ขโมย", "ซื้อของ", "เปิดกล่อง", "สุ่มไข่", "killaura", "make script",
         "generate script", "build script", "create script", "write script"
@@ -176,15 +177,23 @@ class MCIIngestionEngine:
         has_script_trigger = any(t in lowered_text for t in cls.SCRIPT_CREATION_TRIGGERS)
         has_deobf_trigger = any(t in lowered_text for t in cls.DEOBF_TRIGGERS)
         has_obf_trigger = any(t in lowered_text for t in cls.OBF_TRIGGERS)
-        has_dump_mention = any(t in lowered_text for t in ["dump", "ดัมพ์", "ดัมพ", "แมพดัมพ์", "map dump", "game dump", "ข้อมูลแมพ", "โครงสร้างแมพ"])
+        has_dump_mention = any(t in lowered_text for t in ["dump", "ดัมพ์", "ดัมพ", "แมพดัมพ์", "map dump", "game dump", "ข้อมูลแมพ", "โครงสร้างแมพ", "pbg"])
+        is_dump_fn = any(k in fn_lower for k in [
+            "pbg_dump", "pbgdump", "map_dump", "mapdump", "dump_map", "dumpmap",
+            "workspace_dump", "replicatedstorage_dump", "dex_dump", "dump_workspace", "dump_replicated",
+            "dump_hierarchy", "game_dump"
+        ])
+        is_pbg_dump_content = any(k in sample_str.lower() for k in [
+            "payomboyz ai script dump map", "pbg dump", "payomboyz_dump", "dumped workspace", "dumped replicatedstorage"
+        ])
 
         # 5. Core Decision Matrix
         # Case A: Explicit Map Dump Detection (JSON dump or Luau table dump of game services)
-        if (dump_matches >= 2 or is_dump_json or (dump_matches >= 1 and has_dump_mention)) and obf_engine == "none":
+        if (dump_matches >= 2 or is_dump_json or is_dump_fn or is_pbg_dump_content or (dump_matches >= 1 and has_dump_mention)) and obf_engine == "none":
             # This is definitely a Map Dump!
             return IngestionResult(
                 route_target="game_dump_synthesis",
-                confidence=0.96,
+                confidence=0.98,
                 payload_type="game_dump",
                 detected_engine="map_schema_dump",
                 extracted_prompt=text if text else "วิเคราะห์ Remotes และโครงสร้างในแมพดัมพ์นี้เพื่อสร้างสคริปต์ Auto Farm / Exploits ตัวเต็ม",
@@ -192,7 +201,9 @@ class MCIIngestionEngine:
                 diagnostics={
                     "dump_matches": dump_matches,
                     "is_dump_json": is_dump_json,
-                    "reason": "Clear ReplicatedStorage/Workspace dump structure"
+                    "is_dump_fn": is_dump_fn,
+                    "is_pbg_dump_content": is_pbg_dump_content,
+                    "reason": "Clear ReplicatedStorage/Workspace dump structure (PayomboyZ Dump Map)"
                 }
             )
 

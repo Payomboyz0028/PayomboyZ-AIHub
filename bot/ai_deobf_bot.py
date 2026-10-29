@@ -65,6 +65,16 @@ bot = commands.Bot(command_prefix=config.COMMAND_PREFIX, intents=intents, help_c
 install_bot_monitor(bot, "ai")
 PROJECT_NAME = "⚡ PAYOMBØYZ CYBER-AI V9.0 (AUTONOMOUS MCP)"
 
+
+MANDATORY_SCRIPT_DISCLAIMER = (
+    "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    "💡 **หมายเหตุจากระบบ:**\n"
+    "สคริปที่สร้างเป็นต้นแบบในการอธิบายโค้ดและโครงสร้างการทำงานเบื้องต้น "
+    "ถ้าหาผู้ใช้ต้องการสร้างสคริปที่ละเอียดและสามารถทำงานได้มากขึ้นจริงๆ "
+    "ให้ใช้ **PayomboyZ AI Script Dump Map** ไปดัมพ์โครงสร้าง Workspace "
+    "และ ReplicateStorage มาให้ผม เพื่อให้ผมได้รู้จักโครงสร้างแมพนั้นได้มากขึ้น"
+)
+
 AI_CONFIG_FILE = BASE_DIR / "ai_channel_config.json"
 
 
@@ -156,20 +166,67 @@ def save_temp_input(content_bytes: bytes, filename: str) -> Path:
     return temp_target
 
 
+def normalize_discord_codeblocks(text: str) -> str:
+    """Normalize broken quad or quint backticks and nested codeblocks for clean Discord markdown rendering."""
+    if not text:
+        return ""
+    import re as _re_norm
+    norm = _re_norm.sub(r'`{4,}(?:lua|luau)?\s*\n', '```lua\n', text, flags=_re_norm.IGNORECASE)
+    norm = _re_norm.sub(r'`{4,}', '```', norm)
+    norm = _re_norm.sub(r'(```(?:lua|luau)?\s*\n)+```(?:lua|luau)?', '```lua\n', norm, flags=_re_norm.IGNORECASE)
+    return norm
+
+
 def split_long_text_for_discord(text: str, chunk_size: int = 1800) -> list[str]:
-    payload = (text or "").strip()
+    """Robust, index-advancing message chunker for Discord.
+
+    Guarantees:
+    1. Zero character loss between chunks (no dropped characters).
+    2. Codeblocks crossing chunk boundaries are cleanly closed with ``` at the end of the chunk
+       and reopened with ```lua at the top of the next chunk.
+    3. Discord never renders unclosed or broken plaintext code.
+    """
+    payload = normalize_discord_codeblocks(text or "").strip()
     if not payload:
         return []
     if len(payload) <= chunk_size:
         return [payload]
+
     chunks: list[str] = []
-    for idx in range(0, len(payload), chunk_size):
-        chunk = payload[idx:idx + chunk_size]
-        last_nl = chunk.rfind("\n")
-        if last_nl > chunk_size * 0.6:
-            chunk = chunk[:last_nl]
-        chunks.append(chunk.strip())
-    return [c for c in chunks if c]
+    curr_idx = 0
+    in_code_block = False
+    active_code_lang = "lua"
+
+    while curr_idx < len(payload):
+        end_idx = min(curr_idx + chunk_size, len(payload))
+        if end_idx < len(payload):
+            last_nl = payload.rfind("\n", curr_idx, end_idx)
+            if last_nl > curr_idx + int(chunk_size * 0.45):
+                end_idx = last_nl + 1
+
+        sub = payload[curr_idx:end_idx]
+        chunk_text = sub
+        if in_code_block:
+            chunk_text = f"```{active_code_lang}\n" + chunk_text
+
+        fences_count = sub.count("```")
+        if in_code_block:
+            if fences_count % 2 == 1:
+                in_code_block = False
+            else:
+                chunk_text = chunk_text.rstrip() + "\n```"
+        else:
+            if fences_count % 2 == 1:
+                in_code_block = True
+                lang_match = re.findall(r'```(\\w*)', sub)
+                active_code_lang = lang_match[-1] if (lang_match and lang_match[-1]) else "lua"
+                chunk_text = chunk_text.rstrip() + "\n```"
+
+        if chunk_text.strip():
+            chunks.append(chunk_text.strip())
+        curr_idx = end_idx
+
+    return [c for c in chunks if c.strip()]
 
 
 def split_lua_payload_for_discord(lua_text: str, max_chars: int = 7500000, max_lines_per_chunk: int = 250000) -> list[str]:
@@ -3512,10 +3569,17 @@ async def _handle_ai_message(message: discord.Message):
         except Exception as r_err:
             print(f"[AI CHAT] Roblox game resolution error: {r_err}", flush=True)
 
-    # 2.6 Detect Roblox game name from conversational text ONLY if user explicitly mentions Roblox or exploit
-    user_explicitly_mentions_roblox = any(w in lowered_content for w in [
+    is_ai_script_channel = (
+        message.channel.id == 1550220801297490061
+        or (getattr(message.channel, "name", "") and "ai-สร้างสคริป" in getattr(message.channel, "name", "").lower())
+    )
+
+    # 2.6 Detect Roblox game name from conversational text ONLY if user explicitly mentions Roblox or exploit or in script channel
+    user_explicitly_mentions_roblox = is_ai_script_channel or any(w in lowered_content for w in [
         "roblox", "โรบล็อก", "executor", "โปรแมพ", "สคริปต์แมพ", "สคริปแมพ",
-        "บล็อกฟรุต", "bloxfruit", "fisch", "rivals", "solara", "wave", "delta", "synapse"
+        "บล็อกฟรุต", "bloxfruit", "fisch", "rivals", "solara", "wave", "delta", "synapse",
+        "ฟามออโต้", "ออโต้ฟาม", "ฟาร์มออโต้", "ออโต้ฟาร์ม", "ฟาร์ม", "ฟาม", "auto farm", "autofarm",
+        "สตีลไฟเตอร์", "steel fighters", "steelfighters"
     ])
     if not roblox_game_info and user_explicitly_mentions_roblox:
         from bot.knowledge_router import ROUTER as KNOWLEDGE_ROUTER
@@ -3534,6 +3598,18 @@ async def _handle_ai_message(message: discord.Message):
                 raw_cand = m_map.group(1).strip()
                 if raw_cand.lower() not in ["หน่อย", "ครับ", "ค่ะ", "นี้", "นั้น", "ให้", "ใหม่", "loop", "python", "discord"]:
                     detected_game = raw_cand
+
+        # Fallback candidate extraction: strip farm / action keywords to discover the game name
+        if not detected_game and (is_ai_script_channel or any(kw in lowered_content for kw in ["ฟามออโต้", "ออโต้ฟาม", "ฟาร์มออโต้", "ออโต้ฟาร์ม", "ฟาร์ม", "ฟาม", "สคริป", "สคริปต์", "autofarm", "auto farm"])):
+            cand_strip = re.sub(
+                r'(?i)\b(auto\s*farm|autofarm|auto|farm|script|lua|luau|roblox|executor)\b|ฟามออโต้|ออโต้ฟาม|ฟาร์มออโต้|ออโต้ฟาร์ม|ฟาร์ม|ฟาม|สคริปต์|สคริป|ขอสคริป|ขอสคริปต์|สร้างสคริป|สร้างสคริปต์|ขอ|ช่วย|ทำ|สร้าง|เขียน|หน่อย|ครับ|ค่ะ|ให้|โปรแมพ|ตีมอน',
+                ' ',
+                content
+            ).strip()
+            if 2 <= len(cand_strip) <= 40:
+                words = [w for w in re.split(r'\s+', cand_strip) if w]
+                if words and any(re.search(r'[a-zA-Z]', w) for w in words):
+                    detected_game = " ".join(words).title()
 
         if detected_game:
             from bot.roblox_platform_intel import ROBLOX_INTEL
@@ -3559,11 +3635,14 @@ async def _handle_ai_message(message: discord.Message):
     is_explicit_deob_cmd = any(w in lowered_content for w in ["แกะ", "ถอด", "deob", "unobf", "unpack", "ถอดรหัส"])
     has_attachment_to_deobf = bool(attached_code_text and len(attached_code_text.strip()) > 50 and is_explicit_deob_cmd)
     is_full_script_creation = bool(
-        any(w in lowered_content for w in [
-            "สร้างสคริป roblox", "ทำสคริป roblox", "สคริปต์เต็มระบบ", "สคริปเต็มระบบ", "ขอสคริป roblox",
-            "เขียนสคริปต์ roblox", "เขียนสคริป roblox", "สคริปต์แมพ", "สคริปแมพ", "ขอสคริปต์", "ขอสคริป",
-            "auto farm", "ออโต้ฟาร์ม", "ออโต้ฟาม", "autofarm"
-        ])
+        (
+            is_ai_script_channel
+            or any(w in lowered_content for w in [
+                "สร้างสคริป roblox", "ทำสคริป roblox", "สคริปต์เต็มระบบ", "สคริปเต็มระบบ", "ขอสคริป roblox",
+                "เขียนสคริปต์ roblox", "เขียนสคริป roblox", "สคริปต์แมพ", "สคริปแมพ", "ขอสคริปต์", "ขอสคริป",
+                "auto farm", "ออโต้ฟาร์ม", "ออโต้ฟาม", "ฟามออโต้", "ฟาร์มออโต้", "autofarm", "ฟาร์ม", "ฟาม"
+            ])
+        )
         and (roblox_game_info or user_explicitly_mentions_roblox)
         and not has_attachment_to_deobf
     )
@@ -3657,70 +3736,80 @@ async def _handle_ai_message(message: discord.Message):
                 print("[AI QA] Sampled this turn for idle-only ThaiLLM review.", flush=True)
 
         # ---------------------------------------------------------------
-        # Strict output split:
-        # - EXPLANATION / GUIDANCE stays in chat
-        # - ONLY executable Lua code goes into a .lua file
-        # - If no real Lua code exists, never attach a script file
         # ---------------------------------------------------------------
-        # Strict output split:
-        # Only treat as a script attachment request if:
-        # 1. The user explicitly asked for a Roblox/Luau script
-        # 2. AND there is actual Luau code fenced in ```lua ... ```
-        is_lua_code_present = ("```lua" in reply_text.lower() or "```luau" in reply_text.lower())
-        script_request = bool(
-            (roblox_game_info or any(token in (content or "").lower() for token in [
-                "roblox", "luau", "executor", "สคริปต์ roblox", "สคริป roblox", "โปรแมพ", "auto farm", "autofarm"
-            ]))
-            and is_lua_code_present
+        # Strict Output Split & Safe Codeblock Delivery Gate
+        # - Conversational guidance + clean preview in Discord chat
+        # - Complete, unshortened Luau code in .luau file attachment
+        # - Mandatory system disclaimer appended
+        # ---------------------------------------------------------------
+        extracted_lua, chat_text = extract_real_lua_output(
+            reply_text,
+            force_full=True if (is_ai_script_channel or is_full_script_creation or roblox_game_info) else False
         )
-        extracted_lua, chat_text = extract_real_lua_output(reply_text, force_full=True if script_request else False)
-        # If this is not a Roblox script request, keep everything as conversational chat
-        if not script_request:
-            extracted_lua = ""
-            chat_text = reply_text
+        has_real_script = bool(extracted_lua and looks_like_real_lua(extracted_lua))
+
+        # Append mandatory disclaimer for script channel or script responses
+        if is_ai_script_channel or is_full_script_creation or has_real_script:
+            if MANDATORY_SCRIPT_DISCLAIMER not in (chat_text or ""):
+                chat_text = (chat_text or "").rstrip() + MANDATORY_SCRIPT_DISCLAIMER
 
         async def send_direct(text: str, file: Optional[discord.File] = None):
             if text and message.author:
-                text = f"**ถึง {message.author.mention}**\n\n{text}"
+                text = f"**ถึง {message.author.mention}**\n\n" + text
             return await message.reply(text, mention_author=True, file=file) if file else await message.reply(text, mention_author=True)
 
-        if len(reply_text) <= 1950 and not extracted_lua:
-            await send_direct(reply_text)
-
-        elif extracted_lua:
-            if chat_text and chat_text.strip():
-                for part in split_long_text_for_discord(chat_text, chunk_size=1800):
+        if has_real_script:
+            # Safe code delivery:
+            # If short (<= 900 chars), display full codebox cleanly in chat.
+            # If long, display a clean 25-line preview box + attach complete .luau file.
+            if len(extracted_lua) <= 900:
+                code_box = "```lua\n" + extracted_lua.strip() + "\n```"
+                full_chat = (chat_text + "\n\n" + code_box) if chat_text.strip() else code_box
+                for part in split_long_text_for_discord(full_chat, chunk_size=1800):
                     await send_direct(part)
             else:
-                first_line = next((l.strip() for l in reply_text.splitlines() if l.strip()), "")
-                if first_line:
-                    await send_direct(first_line[:500])
+                preview_lines = [l for l in extracted_lua.splitlines() if l.strip()][:25]
+                preview_content = "\n".join(preview_lines).strip()
+                preview_box = (
+                    "```lua\n" + preview_content + "\n\n"
+                    "-- ======================================================================\n"
+                    f"-- 📥 โค้ดตัวเต็มฉบับสมบูรณ์ ({len(extracted_lua):,} ตัวอักษร) แนบอยู่ในไฟล์ .luau ด้านล่าง\n"
+                    "-- ======================================================================\n"
+                    "```"
+                )
+                full_chat = (chat_text + "\n\n" + preview_box) if chat_text.strip() else preview_box
+                for part in split_long_text_for_discord(full_chat, chunk_size=1800):
+                    await send_direct(part)
 
+            # Deliver complete executable .luau file attachment
+            target_fname = target_script_name if target_script_name.endswith((".lua", ".luau")) else f"{target_script_name}.luau"
             lua_chunks = split_lua_payload_for_discord(extracted_lua, max_chars=7500000, max_lines_per_chunk=250000)
-            manifest_text = build_lua_chunk_manifest(lua_chunks)
-            if manifest_text and len(lua_chunks) > 1:
-                await message.channel.send(f"**📦 Lua Output Preservation Guard**\n{manifest_text}")
-
             if len(lua_chunks) == 1:
                 lua_file_bytes = io.BytesIO(lua_chunks[0].encode("utf-8"))
-                discord_lua_file = discord.File(lua_file_bytes, filename=target_script_name)
+                discord_lua_file = discord.File(lua_file_bytes, filename=target_fname)
                 await message.channel.send(
-                    f"📄 **{target_script_name}** — โค้ดพร้อมรันบน Executor (`{len(lua_chunks[0]):,}` ตัวอักษร)",
+                    f"📄 **{target_fname}** — โค้ดตัวเต็มพร้อมรันบน Executor (`{len(lua_chunks[0]):,}` ตัวอักษร)",
                     file=discord_lua_file
                 )
             else:
-                base_stem = Path(target_script_name).stem
+                base_stem = Path(target_fname).stem
                 for idx, chunk in enumerate(lua_chunks, start=1):
                     lua_file_bytes = io.BytesIO(chunk.encode("utf-8"))
-                    discord_lua_file = discord.File(lua_file_bytes, filename=f"{base_stem}_{idx}.lua")
+                    discord_lua_file = discord.File(lua_file_bytes, filename=f"{base_stem}_{idx}.luau")
                     await message.channel.send(
-                        f"📄 **{base_stem}_{idx}.lua** — ชิ้นที่ {idx}/{len(lua_chunks)} (`{len(chunk):,}` ตัวอักษร)",
+                        f"📄 **{base_stem}_{idx}.luau** — ชิ้นที่ {idx}/{len(lua_chunks)} (`{len(chunk):,}` ตัวอักษร)",
                         file=discord_lua_file
                     )
                     await asyncio.sleep(1.2)
 
+        elif len(reply_text) <= 1950:
+            if is_ai_script_channel and MANDATORY_SCRIPT_DISCLAIMER not in reply_text:
+                reply_text += MANDATORY_SCRIPT_DISCLAIMER
+            await send_direct(reply_text)
 
         else:
+            if is_ai_script_channel and MANDATORY_SCRIPT_DISCLAIMER not in reply_text:
+                reply_text += MANDATORY_SCRIPT_DISCLAIMER
             for part in split_long_text_for_discord(reply_text, chunk_size=1800):
                 await send_direct(part)
 
