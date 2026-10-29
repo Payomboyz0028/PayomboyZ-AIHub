@@ -1782,6 +1782,7 @@ class MultiGameSelectView(discord.ui.View):
     """
     Interactive Discord View for Multi-Game Hubs (e.g. Ouroboros 100+ games).
     Provides a Dropdown Menu of top games + prompt to choose a game or placeId.
+    Persistent view (timeout=None) to ensure dropdown remains responsive 24/7.
     """
     def __init__(
         self,
@@ -1791,7 +1792,7 @@ class MultiGameSelectView(discord.ui.View):
         games_map: Optional[Dict[Any, str]] = None,
         base_url: str = ""
     ):
-        super().__init__(timeout=600)
+        super().__init__(timeout=None)
         self.catalog_list = catalog_list
         self.hub_target = hub_target
         self.author_id = author_id
@@ -1815,30 +1816,30 @@ class MultiGameSelectView(discord.ui.View):
                 placeholder=f"🎮 เลือกแมพที่ต้องการแกะ (แสดง 25 จาก {len(catalog_list)} แมพ)...",
                 min_values=1,
                 max_values=1,
-                options=options
+                options=options,
+                custom_id="payom_multigame_dropdown_v10"
             )
             select.callback = self.select_callback
             self.add_item(select)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if self.author_id and interaction.user.id != self.author_id:
-            await interaction.response.send_message(
-                "❌ เฉพาะผู้ขอถอดรหัสสคริปต์นี้เท่านั้นที่สามารถเลือกแมพได้ครับ",
-                ephemeral=True
-            )
-            return False
+        # Allow any user in the channel to select map or explore the hub
         return True
 
     async def select_callback(self, interaction: discord.Interaction):
-        selected_pid = int(interaction.data["values"][0])
-        await interaction.response.send_message(
-            f"⏳ ได้รับคำสั่ง: กำลังดาวน์โหลดและถอดรหัสสคริปต์สำหรับ PlaceId `{selected_pid}`...",
-            ephemeral=False
-        )
+        # 1. IMMEDIATE DEFERRAL: Acknowledge within 50ms so Discord never times out
+        await interaction.response.defer(thinking=True)
+
+        raw_val = interaction.data["values"][0]
+        try:
+            selected_pid = int(raw_val)
+        except (ValueError, TypeError):
+            selected_pid = str(raw_val)
 
         try:
             import asyncio
             import io
+            import re
             from pathlib import Path
             from bot.loader_spy_engine import spy_and_deobf
 
@@ -1856,7 +1857,7 @@ class MultiGameSelectView(discord.ui.View):
                     target_script_url = f"{self.base_url.rstrip('/')}/{fn.lstrip('/')}"
             elif self.catalog_list:
                 for g in self.catalog_list:
-                    if int(g.get("place_id", 0)) == selected_pid:
+                    if str(g.get("place_id", "")) == str(selected_pid):
                         fn = g.get("filename", "")
                         if fn.startswith("http://") or fn.startswith("https://"):
                             target_script_url = fn
@@ -1865,6 +1866,12 @@ class MultiGameSelectView(discord.ui.View):
                         break
 
             deobf_target = target_script_url or self.hub_target
+            # If target_script_url was not explicitly resolved but hub_target has a parent dir
+            if not target_script_url and fn and self.hub_target.startswith("http"):
+                parent_base = self.hub_target.rsplit("/", 1)[0]
+                target_script_url = f"{parent_base.rstrip('/')}/{fn.lstrip('/')}"
+                deobf_target = target_script_url
+
             spy_res = await asyncio.to_thread(spy_and_deobf, deobf_target, place_id=selected_pid)
             if spy_res.get("success"):
                 conf = spy_res.get("confidence", 100.0)
@@ -1883,15 +1890,18 @@ class MultiGameSelectView(discord.ui.View):
                         f"**เป้าหมาย URL:** `{target_u}`\n"
                         f"**ระดับความแม่นยำ (Confidence):** `{conf:.1f}%` ({grade}) 🎯\n"
                         f"**โครงสร้างที่กู้คืนได้:** `{lines:,} บรรทัด` (Clean Luau)\n"
-                        f"**เวลาที่ใช้:** `{elapsed:.2f}s`\n"
+                        f"**เวลาที่ใช้:** `{elapsed:.2f}s`\n\n"
+                        "💡 *หากสคริปต์นี้เข้ารหัสแบบ VM Memory ในเกม สามารถกดปุ่มด้านล่างเพื่อดึง Source แท้ได้ทันที!*"
                     ),
                     color=discord.Color.from_rgb(0, 230, 150)
                 )
                 file_bytes = io.BytesIO(deobf_code.encode("utf-8"))
                 stem_name = Path(target_u).stem if target_u and target_u != "GitHub Raw" else f"hub_place_{selected_pid}"
                 safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', stem_name or f"hub_place_{selected_pid}")
-                f = discord.File(file_bytes, filename=f"{safe_name}.deobf.luau")
-                await interaction.followup.send(embed=embed, file=f)
+                f = discord.File(file_bytes, filename=f"{safe_name}.clean.luau")
+                
+                await interaction.followup.send(embed=embed, file=f, view=DeobfResultActionView())
+                ACTIVE_MULTIGAME_HUBS.pop(interaction.channel_id, None)
             else:
                 err_text = spy_res.get('error', 'Unknown failure')
                 await interaction.followup.send(

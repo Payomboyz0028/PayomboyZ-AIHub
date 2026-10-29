@@ -346,6 +346,35 @@ class LoaderSpyEngine:
         if not games_map:
             return None
 
+        # Filter out false-positives: VM string tables, random hash constants
+        def _is_plausible_target(target: str, has_base: bool) -> bool:
+            t = target.strip()
+            t_low = t.lower()
+            if t_low.startswith("http://") or t_low.startswith("https://"):
+                return True
+            if any(t_low.endswith(ext) for ext in [".lua", ".luau", ".txt"]):
+                return True
+            if "/" in t and len(t) < 80:
+                return True
+            if has_base and len(t) < 45 and not re.search(r'[^a-zA-Z0-9_\-\.]', t):
+                return True
+            return False
+
+        has_place_ref = bool(re.search(r'\b(?:PlaceId|placeId|GameId|gameId)\b', code))
+        filtered_map: Dict[int, str] = {}
+        for pid, target in games_map.items():
+            if _is_plausible_target(target, bool(base_url)):
+                filtered_map[pid] = target
+
+        if not filtered_map:
+            return None
+
+        # If code doesn't mention PlaceId/GameId at all, require base_url or explicit HTTP URLs
+        if not has_place_ref:
+            has_http_targets = any(t.lower().startswith("http://") or t.lower().startswith("https://") for t in filtered_map.values())
+            if not base_url and not has_http_targets:
+                return None
+
         # 3. Detect Honeypot Traps (e.g. solara/xeno blocker loadstring)
         honeypot = None
         m_trap = re.search(r'(?:solara|xeno|executor|blacklisted|trapped|ban).*?(?:BASE\s*\.\.\s*["\']([^"\']+)["\']|loadstring\s*\(\s*["\'](https?://[^"\']+)["\'])', code, re.DOTALL | re.IGNORECASE)
@@ -355,8 +384,8 @@ class LoaderSpyEngine:
         return {
             "is_multigame": True,
             "base_url": base_url,
-            "games_map": games_map,
-            "total_games": len(games_map),
+            "games_map": filtered_map,
+            "total_games": len(filtered_map),
             "honeypot_trap": honeypot
         }
 
@@ -670,6 +699,13 @@ class LoaderSpyEngine:
                     target_script_url = selected_filename
                 else:
                     target_script_url = f"{base_u.rstrip('/')}/{selected_filename.lstrip('/')}" if base_u else selected_filename
+
+                # Derive base URL from origin URL if base_u was empty and target_script_url is not absolute
+                if not target_script_url.startswith("http://") and not target_script_url.startswith("https://"):
+                    origin_u = final_url if (final_url and final_url.startswith("http")) else (current_input if current_input.startswith("http") else "")
+                    if origin_u and "/" in origin_u:
+                        parent_base = origin_u.rsplit("/", 1)[0]
+                        target_script_url = f"{parent_base.rstrip('/')}/{selected_filename.lstrip('/')}"
 
                 multigame_info["selected_place_id"] = resolved_pid
                 multigame_info["selected_game_name"] = resolved_game_name

@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
 ========================================================================================
-🌪️ PAYOMBØYZ RUNTIME MEMORY INTERCEPTOR & IN-GAME DUMPER GENERATOR
-- Generates 100% executable Luau Memory Interceptor scripts for Executors
-- Compatible with: Delta, Wave, Solara, Synapse Z, Xeno, MacSploit, Argon, etc.
-- Intercepts unpacked module closures, Luarmor V4 tables, Luraph buffers, and loadstrings
-- Auto-saves dumped raw payload to: workspace/PAYOMBOYZ_DUMPED_RAW.luau
+🌪️ PAYOMBØYZ RUNTIME MEMORY INTERCEPTOR & ZERO-DAY AUTO-DUMPER GENERATOR
+- Generates 100% executable Luau AutoExecute & Runtime Memory Interceptors for Executors
+- Compatible with: Real, Delta, Wave, Solara, Synapse Z, Xeno, MacSploit, Argon, etc.
+- Multi-Stage Snooper: Polsec V2, Fulcrum WebSockets, Luarmor V4, Luraph VM, MoonSec VM
+- Auto-copies recovered genuine source code to Windows Clipboard (Ctrl+V) instantly
+- Auto-saves dumped raw payload to: workspace/Latest_Captured_Script.luau & Captured_Scripts/
 ========================================================================================
 """
 
@@ -14,168 +15,335 @@ import io
 import discord
 
 RUNTIME_INTERCEPTOR_LUAU = """--!nocheck
--- ============================================================================
--- ⚡ PAYOMBØYZ CYBER-AI | UNIVERSAL IN-GAME RUNTIME MEMORY INTERCEPTOR
--- Purpose: Transparent Memory Hook for Unpacking Luarmor V4, Luraph V15,
---          MoonSec VM, and Custom Encrypted Loaders in Roblox RAM.
--- Target Output: workspace/PAYOMBOYZ_DUMPED_RAW.luau
--- ============================================================================
+--!nolint
+-- ==============================================================================
+-- [PAYOMBØYZ GODMODE UNIVERSAL ZERO-DAY SCRIPT INTERCEPTOR & AUTO-DUMPER]
+-- Path: AutoExecute (e.g. Real/autoexec/ or run before target script)
+-- Powered by: PAYOMBØYZ CYBER-AI (Autonomous Forensics & Runtime Unpacker)
+-- Target Output: Windows Clipboard (Ctrl+V) & workspace/Latest_Captured_Script.luau
+-- Compatible with: Real, Delta, Wave, Solara, Synapse Z, Xeno, MacSploit, Celery
+-- ==============================================================================
 
-local write_fn = writefile or (syn and syn.writefile)
-if not write_fn then
-    warn("[PAYOMBOYZ] ❌ Executor ของคุณไม่รองรับ writefile! ไม่สามารถบันทึกไฟล์ dump ลง workspace ได้")
+if getgenv and getgenv().__PAYOMBOYZ_DUMPER_LOADED then
+    print("🔁 [PAYOMBØYZ] Auto-Dumper already active in memory.")
     return
 end
 
-local dump_file_name = "PAYOMBOYZ_DUMPED_RAW.luau"
-local captured_count = 0
-local intercepted_modules = {}
+local G = (getgenv and getgenv()) or _G
+pcall(function() G.__PAYOMBOYZ_DUMPER_LOADED = true end)
 
-local function notify_user(title, msg, duration)
+print("==================================================================")
+print("🚀 [PAYOMBØYZ] Universal AutoExecute Script Dumper Initialized!")
+print("🎯 Monitoring: loadstring, load, decodeCache, and Dynamic Sinks...")
+print("📋 Auto-Copy to Clipboard: ACTIVE (Ctrl+V immediately after execution)")
+print("==================================================================")
+
+local real_loadstring   = loadstring or (G and G.loadstring)
+local real_load         = load or (G and G.load)
+local real_writefile    = writefile or (G and G.writefile)
+local real_makefolder   = makefolder or (G and G.makefolder)
+local real_isfolder     = isfolder or (G and G.isfolder)
+local real_setclipboard = setclipboard or toclipboard or (G and G.setclipboard) or (Clipboard and Clipboard.set)
+
+-- Ensure workspace directory structure
+pcall(function()
+    if real_makefolder and real_isfolder and not real_isfolder("Captured_Scripts") then
+        real_makefolder("Captured_Scripts")
+    end
+end)
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 1. STEALTH ANTI-TAMPER SHIELD (PREVENT LOADER CRASHES & CHECKS)
+-- ─────────────────────────────────────────────────────────────────────────────
+local falseFunc = function() return false end
+local trueFunc  = function() return true end
+
+pcall(function() G.isfunctionhooked = falseFunc end)
+pcall(function() getfenv().isfunctionhooked = falseFunc end)
+pcall(function() if _G then _G.isfunctionhooked = falseFunc end end)
+
+pcall(function() G.isnewcclosure = trueFunc end)
+pcall(function() getfenv().isnewcclosure = trueFunc end)
+pcall(function() if _G then _G.isnewcclosure = trueFunc end end)
+
+pcall(function() G.checkcaller = trueFunc end)
+pcall(function() getfenv().checkcaller = trueFunc end)
+
+-- Protect WebSocket native C closure (Prevents Polsec disconnect / retry loops)
+pcall(function()
+    if WebSocket and WebSocket.Connect then
+        WebSocket.connect = WebSocket.Connect
+        if G.WebSocket then G.WebSocket.connect = WebSocket.Connect end
+    end
+end)
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 2. DUMPING ENGINE & CLIPBOARD PIPELINE
+-- ─────────────────────────────────────────────────────────────────────────────
+local capturedHashes = {}
+local dumpCount = 0
+
+local function fastHash(s)
+    local h = 5381
+    local len = #s
+    local step = math.max(1, math.floor(len / 40))
+    for i = 1, len, step do
+        h = ((h * 33) + string.byte(s, i)) % 4294967296
+    end
+    return string.format("%d_%08x", len, h)
+end
+
+local function harvestScript(src, origin, extraInfo)
+    if not src or type(src) ~= "string" or #src < 120 then return end
+    
+    -- Exclude internal dumper script signature
+    if src:find("PAYOMBOYZ_DUMPER_LOADED") or src:find("Universal AutoExecute Script Dumper") then
+        return
+    end
+
+    -- Exclude Polsec enclib codec from being treated as the final game script
+    if src:find("Zstd decoder adapted from") or src:find("101arrowz/fzstd") then
+        return
+    end
+
+    local h = fastHash(src)
+    if capturedHashes[h] then return end
+    capturedHashes[h] = true
+
+    dumpCount = dumpCount + 1
+    local lineCount = #string.split(src, "\\n")
+    local sizeBytes = #src
+
+    print("==================================================================")
+    print(string.format("🎉 [PAYOMBØYZ] CAPTURED GENUINE SCRIPT PAYLOAD #%d!", dumpCount))
+    print(string.format("   Origin: %s %s", tostring(origin), extraInfo and ("(" .. tostring(extraInfo) .. ")") or ""))
+    print(string.format("   Size: %d bytes | Lines: %d", sizeBytes, lineCount))
+    print("   📋 STATUS: COPIED DIRECTLY TO WINDOWS CLIPBOARD (Ctrl+V)!")
+    print("   💾 BACKUP: workspace/Latest_Captured_Script.luau")
+    print("==================================================================")
+
+    -- 1. Copy directly to Windows Clipboard (Ctrl+V)
+    if real_setclipboard then
+        pcall(function() real_setclipboard(src) end)
+    end
+
+    -- 2. Save directly to workspace root for instant access
+    if real_writefile then
+        pcall(function()
+            real_writefile("Latest_Captured_Script.luau", src)
+            real_writefile("PAYOMBOYZ_DUMPED_RAW.luau", src)
+            
+            -- Save timestamped version into archive folder
+            local filename = string.format("Captured_Scripts/Script_%s_%d.luau", tostring(os.date("%Y%m%d_%H%M%S")), dumpCount)
+            real_writefile(filename, src)
+        end)
+    end
+
+    -- 3. Visual In-Game Notification
     pcall(function()
         game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "⚡ " .. (title or "PAYOMBØYZ DUMPER"),
-            Text = msg or "Intercepted Memory Payload!",
-            Duration = duration or 5
+            Title = "🎉 SCRIPT CAPTURED (COPIED)!",
+            Text = string.format("ดึงโค้ดสำเร็จ (%d ไบต์) กด Ctrl+V ได้เลย!", sizeBytes),
+            Duration = 8
         })
     end)
-    print(string.format("[PAYOMBOYZ] %s: %s", title, msg))
 end
 
--- Banner Notification
-notify_user("INTERCEPTOR ARMED", "เบ็ดตกปลาใน RAM กางพร้อมแล้ว! กรุณารันสคริปต์เป้าหมายได้เลย", 6)
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 3. MULTI-STAGE POLSEC CODEC SNOOPER (ZSTD / CHACHA20)
+-- ─────────────────────────────────────────────────────────────────────────────
+local function wrapEnclibModule(codecModule)
+    if type(codecModule) ~= "table" or not codecModule.new then
+        return codecModule
+    end
 
--- ─────────────────────────────────────────────────────────────────────────────
--- HOOK 1: SETMETATABLE (Intercepts Unpacked Luarmor / Luraph Module Tables)
--- ─────────────────────────────────────────────────────────────────────────────
-local old_setmetatable
-old_setmetatable = hookfunction(setmetatable, function(tbl, meta)
-    if type(tbl) == "table" and not tbl.__payomboyz_dumped then
-        local fn_count = 0
-        local keys_preview = {}
-        for k, v in pairs(tbl) do
-            if type(v) == "function" then
-                fn_count = fn_count + 1
+    local origNew = codecModule.new
+    codecModule.new = function(k1, k2)
+        print("🔑 [SPY:KEY_SNIFFER] Polsec Codec Initialized!")
+        local inst = origNew(k1, k2)
+        if type(inst) == "table" and inst.decodeCache then
+            local origDecode = inst.decodeCache
+            inst.decodeCache = function(packet)
+                local res = origDecode(packet)
+                if res then
+                    if type(res) == "table" then
+                        pcall(function()
+                            for k, v in pairs(res) do
+                                if type(v) == "string" and #v > 200 then
+                                    harvestScript(v, "decodeCache.table", tostring(k))
+                                end
+                            end
+                            local hs = game:GetService("HttpService")
+                            local json = hs:JSONEncode(res)
+                            if real_writefile then
+                                real_writefile("Latest_Polsec_Packet.json", json)
+                            end
+                        end)
+                    elseif type(res) == "string" and #res > 200 then
+                        harvestScript(res, "decodeCache.raw", nil)
+                    end
+                end
+                return res
             end
         end
+        return inst
+    end
 
-        -- Module table signature: typically 15+ to 150+ unpacked closures
-        if fn_count >= 12 then
-            tbl.__payomboyz_dumped = true
-            captured_count = captured_count + 1
-            notify_user("MODULE CAPTURED!", string.format("ตรวจจับ Module Table ได้ %d ฟังก์ชัน! กำลังเซฟลงไฟล์...", fn_count), 5)
+    return codecModule
+end
 
-            local dump_lines = {
-                "-- ============================================================================",
-                "-- ⚡ PAYOMBØYZ RUNTIME INTERCEPTOR — UNPACKED MODULE TABLE DUMP",
-                string.format("-- Captured Modules: %d | Timestamp: %s", fn_count, os.date("!%Y-%m-%d %H:%M:%SZ")),
-                "-- ============================================================================",
-                "return {",
-            }
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 4. UNIVERSAL LOADSTRING / LOAD SINK INTERCEPTOR
+-- ─────────────────────────────────────────────────────────────────────────────
+local function universalTrap(codeStr, chunkName)
+    local src = tostring(codeStr or "")
+    local chunk = tostring(chunkName or "anonymous")
 
-            for k, v in pairs(tbl) do
-                if k ~= "__payomboyz_dumped" then
-                    local key_repr = type(k) == "number" and string.format("[%d]", k) or string.format("[%q]", tostring(k))
-                    local val_repr = "nil"
-                    if type(v) == "function" then
-                        local dump_success, dumped_code = pcall(function()
-                            if decompile then
-                                return decompile(v)
-                            end
-                            return nil
-                        end)
-                        if dump_success and dumped_code and #dumped_code > 5 then
-                            val_repr = dumped_code
-                        else
-                            val_repr = string.format("function(...) --[[ Closure Ref: %s ]] end", tostring(v))
-                        end
-                    elseif type(v) == "string" then
-                        val_repr = string.format("%q", v)
-                    elseif type(v) == "number" or type(v) == "boolean" then
-                        val_repr = tostring(v)
-                    end
-                    table.insert(dump_lines, string.format("    %s = %s,", key_repr, val_repr))
-                end
-            end
-            table.insert(dump_lines, "}")
+    -- [STAGE 1] Detect Polsec Enclib Codec
+    if src:find("Zstd decoder") or src:find("101arrowz") or src:find("decodeCache") or src:find("PSC4N") then
+        print(string.format("⚡ [SPY:STAGE_1] Polsec Codec Intercepted (%d bytes) - Compiling and hooking...", #src))
+        
+        local compiled = real_loadstring and real_loadstring(codeStr, chunkName)
+        if not compiled and real_load then
+            compiled = real_load(codeStr, chunkName)
+        end
 
-            local content = table.concat(dump_lines, "\\n")
-            write_fn(dump_file_name, content)
-            notify_user("DUMP SAVED! ✅", "บันทึกสำเร็จที่ workspace/" .. dump_file_name .. " ให้นำไฟล์นี้ไปให้บอทแกะได้เลย!", 8)
+        return function(...)
+            local codecModule = compiled(...)
+            return wrapEnclibModule(codecModule)
         end
     end
-    return old_setmetatable(tbl, meta)
-end)
+
+    -- [STAGE 2] Genuine Script Payload Interception
+    if #src >= 120 then
+        harvestScript(src, "loadstring", chunk)
+    end
+
+    if real_loadstring then
+        return real_loadstring(codeStr, chunkName)
+    elseif real_load then
+        return real_load(codeStr, chunkName)
+    end
+    return function(...) end
+end
+
+local finalHook = universalTrap
+if newcclosure then
+    pcall(function() finalHook = newcclosure(universalTrap) end)
+end
+
+pcall(function() G.loadstring = finalHook end)
+pcall(function() getfenv().loadstring = finalHook end)
+pcall(function() if _G then _G.loadstring = finalHook end end)
+
+pcall(function() G.load = finalHook end)
+pcall(function() getfenv().load = finalHook end)
+pcall(function() if _G then _G.load = finalHook end end)
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- HOOK 2: LOADSTRING (Intercepts Secondary Bytecode Payloads & Dynamic Chunks)
+-- 5. SETMETATABLE HOOK (Unpacked Module Tables e.g. Luarmor V4 / Luraph VM)
 -- ─────────────────────────────────────────────────────────────────────────────
-if loadstring then
-    local old_loadstring
-    old_loadstring = hookfunction(loadstring, function(chunk_code, chunk_name)
-        if type(chunk_code) == "string" and #chunk_code > 100 then
-            -- Check if it contains payload characteristics
-            if not string.find(chunk_code, "PAYOMBOYZ") then
-                captured_count = captured_count + 1
-                local filename = string.format("PAYOMBOYZ_LOADSTRING_%d.luau", captured_count)
-                write_fn(filename, chunk_code)
-                -- Also mirror to primary dump file if empty or shorter
-                write_fn(dump_file_name, chunk_code)
-                notify_user("LOADSTRING INTERCEPTED! 🎯", string.format("ดักจับโค้ดดิบ %d ไบต์! บันทึกที่ workspace/%s", #chunk_code, dump_file_name), 6)
+local old_setmetatable = hookfunction and (getgenv and getgenv().setmetatable or setmetatable)
+if old_setmetatable and hookfunction then
+    pcall(function()
+        hookfunction(setmetatable, function(tbl, meta)
+            if type(tbl) == "table" and not tbl.__payomboyz_dumped then
+                local fn_count = 0
+                for k, v in pairs(tbl) do
+                    if type(v) == "function" then
+                        fn_count = fn_count + 1
+                    end
+                end
+
+                if fn_count >= 12 then
+                    tbl.__payomboyz_dumped = true
+                    local dump_lines = {
+                        "-- ============================================================================",
+                        "-- ⚡ PAYOMBØYZ RUNTIME INTERCEPTOR — UNPACKED MODULE TABLE DUMP",
+                        string.format("-- Captured Closures: %d | Timestamp: %s", fn_count, os.date("!%Y-%m-%d %H:%M:%SZ")),
+                        "-- ============================================================================",
+                        "return {",
+                    }
+                    for k, v in pairs(tbl) do
+                        if k ~= "__payomboyz_dumped" then
+                            local key_repr = type(k) == "number" and string.format("[%d]", k) or string.format("[%q]", tostring(k))
+                            local val_repr = "nil"
+                            if type(v) == "function" then
+                                local dump_success, dumped_code = pcall(function()
+                                    if decompile then return decompile(v) end
+                                    return nil
+                                end)
+                                if dump_success and dumped_code and #dumped_code > 5 then
+                                    val_repr = dumped_code
+                                else
+                                    val_repr = string.format("function(...) --[[ Closure Ref: %s ]] end", tostring(v))
+                                end
+                            elseif type(v) == "string" then
+                                val_repr = string.format("%q", v)
+                            elseif type(v) == "number" or type(v) == "boolean" then
+                                val_repr = tostring(v)
+                            end
+                            table.insert(dump_lines, string.format("    %s = %s,", key_repr, val_repr))
+                        end
+                    end
+                    table.insert(dump_lines, "}")
+                    local moduleContent = table.concat(dump_lines, "\\n")
+                    harvestScript(moduleContent, "setmetatable.module", string.format("%d_funcs", fn_count))
+                end
             end
-        end
-        return old_loadstring(chunk_code, chunk_name)
+            return old_setmetatable(tbl, meta)
+        end)
     end)
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- HOOK 3: HTTPGET (Logs Raw CDN Payload URLs)
+-- 6. HTTPGET HOOK (Logs Raw CDN Payload URLs)
 -- ─────────────────────────────────────────────────────────────────────────────
 pcall(function()
-    local old_httpget
-    old_httpget = hookfunction(game.HttpGet, function(self, url, ...)
-        if type(url) == "string" and not string.find(url, "discord") then
-            print("[PAYOMBOYZ HTTPGET] Target URL: " .. url)
-        end
-        return old_httpget(self, url, ...)
-    end)
+    if hookfunction and game and game.HttpGet then
+        local old_httpget = hookfunction(game.HttpGet, function(self, url, ...)
+            if type(url) == "string" and not string.find(url, "discord") then
+                print("[PAYOMBOYZ HTTPGET] Target URL: " .. url)
+            end
+            return old_httpget(self, url, ...)
+        end)
+    end
 end)
 
-notify_user("READY FOR TARGET", "ระบบพร้อม 100% สั่งรันสคริปต์เป้าหมายเพื่อดึงโค้ดได้เลย!", 5)
+print("🛡️ [PAYOMBØYZ] AutoExecute Dumper is ARMED. Run any script to capture!")
 """
 
 
 def get_runtime_interceptor_file() -> discord.File:
     """Returns the in-game memory interceptor script as a downloadable Discord file."""
     b = io.BytesIO(RUNTIME_INTERCEPTOR_LUAU.encode("utf-8"))
-    return discord.File(b, filename="Runtime_Interceptor.luau")
+    return discord.File(b, filename="PAYOMBOYZ_AutoExecute_Dumper.luau")
 
 
 def build_unbreakable_guide_embed() -> discord.Embed:
     """Builds the comprehensive ephemeral instruction guide for when scripts cannot be statically deobfuscated."""
     embed = discord.Embed(
-        title="🛠️ คู่มือเจาะ Source Code แท้ 100% จาก Memory ในเกม (Runtime Dump)",
+        title="🛠️ PAYOMBØYZ Universal AutoExecute Script Dumper (ดึงโค้ดแท้ 100%)",
         description=(
             "**ทำไมสคริปต์บางตัวถึงแกะแบบ Static ธรรมดาไม่ออก?**\n"
-            "สคริปต์ระดับสูงบางตัว (เช่น **Luarmor V4, Luraph V15 VM, MoonSec VM ซับซ้อนสูง**) "
-            "จะทำการเข้ารหัสและซ่อนตัวแปรไว้ในรูป **VM Bytecode ในแรม** ซึ่งตัวโค้ดที่แท้จริงจะ **คลายตัวเฉพาะตอนที่รันอยู่ในเกม Roblox เท่านั้น!**\n\n"
+            "สคริปต์ระดับสูง (เช่น **PolSec V2 Streaming Socket, Fulcrum, Luarmor V4, Luraph VM, MoonSec VM**) "
+            "จะสตรีมโค้ดผ่าน WebSocket หรือซ่อนตัวแปรไว้ในแรม ซึ่งตัวโค้ดที่แท้จริงจะ **คลายตัวเฉพาะตอนที่รันอยู่ในเกม Roblox เท่านั้น!**\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "👉 **วิธีดึง Source Code แท้กลับมาง่ายๆ ใน 3 ขั้นตอน:**\n\n"
-            "**1️⃣ ดาวน์โหลดไฟล์ Interceptor**\n"
-            "• ดาวน์โหลดไฟล์ **`Runtime_Interceptor.luau`** ที่แนบมากับข้อความนี้\n\n"
-            "**2️⃣ กางเบ็ดตกปลาใน RAM ก่อนรันสคริปต์**\n"
-            "• เข้าเกม Roblox ในแมพที่สคริปต์นั้นใช้งาน\n"
-            "• เปิด Executor ของคุณ (เช่น Delta, Wave, Solara, Synapse Z, Xeno, MacSploit)\n"
-            "• **รันไฟล์ `Runtime_Interceptor.luau` ก่อนเป็นอันดับแรก!**\n"
-            "• คุณจะเห็นแจ้งเตือนสีเขียวในเกมว่า *'INTERCEPTOR ARMED'* แสดงว่าระบบกางเบ็ดใน RAM เรียบร้อย\n\n"
-            "**3️⃣ รันสคริปต์เป้าหมาย & รับไฟล์กลับ**\n"
+            "👉 **วิธีดึง Source Code แท้กลับมาง่ายๆ (Auto-Copy ลง Clipboard):**\n\n"
+            "**1️⃣ ดาวน์โหลดไฟล์ Dumper**\n"
+            "• ดาวน์โหลดไฟล์ **`PAYOMBOYZ_AutoExecute_Dumper.luau`** ที่แนบมานี้\n\n"
+            "**2️⃣ นำไปใส่ในโฟลเดอร์ AutoExecute หรือรันก่อนเปิดสคริปต์**\n"
+            "• **วิธีที่ 1 (แนะนำสุด):** นำไฟล์นี้ไปวางในโฟลเดอร์ `autoexec` ของโปรแกรมรัน (เช่น Delta, Wave, Real, Solara, Synapse Z)\n"
+            "• **วิธีที่ 2:** เข้าเกม Roblox แล้วรันไฟล์ `PAYOMBOYZ_AutoExecute_Dumper.luau` นี้ก่อน 1 ครั้ง\n"
+            "• เมื่อระบบพร้อม จะมีข้อความเตือนในเกมว่า *'Universal AutoExecute Script Dumper Initialized'* 🟢\n\n"
+            "**3️⃣ รันสคริปต์เป้าหมาย & รับโค้ดทันที**\n"
             "• รันสคริปต์ที่คุณต้องการแกะตามปกติ\n"
-            "• ทันทีที่สคริปต์คลายตัวในแรม ตัว Interceptor จะดักจับ Bytecode และโครงสร้างแท้ทั้งหมด แล้วเซฟลง:\n"
-            "  📂 โฟลเดอร์ `workspace/PAYOMBOYZ_DUMPED_RAW.luau` ในคอมของคุณอัตโนมัติ!\n"
-            "• **นำไฟล์ `PAYOMBOYZ_DUMPED_RAW.luau` จากโฟลเดอร์ workspace กลับมาลากวางลงในแชทนี้** บอทจะถอดรหัสออกมาเป็น Clean Code สมบูรณ์ 100% ทันที!\n"
+            "• **โค้ดที่แท้จริงจะถูก Copy ลง Windows Clipboard อัตโนมัติทันที!** (กด `Ctrl + V` เพื่อวางโค้ดได้เลย)\n"
+            "• พร้อมทั้งบันทึกไฟล์สำรองไว้ที่ `workspace/Latest_Captured_Script.luau` ในเครื่องของคุณ\n"
+            "• นำโค้ดที่ได้มาส่งกลับเข้าบอทเพื่อทำการ Refactor & Clean AST ได้ทันที!\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         ),
-        color=discord.Color.from_rgb(255, 100, 50)
+        color=discord.Color.from_rgb(0, 230, 150)
     )
-    embed.set_footer(text="PAYOMBØYZ ADVANCED FORENSICS • 100% Source Code Recovery")
+    embed.set_footer(text="PAYOMBØYZ ZERO-DAY FORENSICS • Auto-Copy to Clipboard • 100% Precision")
     return embed
