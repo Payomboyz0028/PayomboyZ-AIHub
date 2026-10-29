@@ -3748,11 +3748,6 @@ async def _handle_ai_message(message: discord.Message):
         )
         has_real_script = bool(extracted_lua and looks_like_real_lua(extracted_lua))
 
-        # Append mandatory disclaimer for script channel or script responses
-        if is_ai_script_channel or is_full_script_creation or has_real_script:
-            if MANDATORY_SCRIPT_DISCLAIMER not in (chat_text or ""):
-                chat_text = (chat_text or "").rstrip() + MANDATORY_SCRIPT_DISCLAIMER
-
         async def send_direct(text: str, file: Optional[discord.File] = None):
             if text and message.author:
                 text = f"**ถึง {message.author.mention}**\n\n" + text
@@ -3762,11 +3757,12 @@ async def _handle_ai_message(message: discord.Message):
             # Safe code delivery:
             # If short (<= 900 chars), display full codebox cleanly in chat.
             # If long, display a clean 25-line preview box + attach complete .luau file.
+            clean_intro = chat_text.replace(MANDATORY_SCRIPT_DISCLAIMER, "").strip() if chat_text else ""
+
             if len(extracted_lua) <= 900:
                 code_box = "```lua\n" + extracted_lua.strip() + "\n```"
-                full_chat = (chat_text + "\n\n" + code_box) if chat_text.strip() else code_box
-                for part in split_long_text_for_discord(full_chat, chunk_size=1800):
-                    await send_direct(part)
+                content_parts = [p for p in [clean_intro, code_box] if p]
+                full_chat = "\n\n".join(content_parts)
             else:
                 preview_lines = [l for l in extracted_lua.splitlines() if l.strip()][:25]
                 preview_content = "\n".join(preview_lines).strip()
@@ -3777,9 +3773,16 @@ async def _handle_ai_message(message: discord.Message):
                     "-- ======================================================================\n"
                     "```"
                 )
-                full_chat = (chat_text + "\n\n" + preview_box) if chat_text.strip() else preview_box
-                for part in split_long_text_for_discord(full_chat, chunk_size=1800):
-                    await send_direct(part)
+                content_parts = [p for p in [clean_intro, preview_box] if p]
+                full_chat = "\n\n".join(content_parts)
+
+            # Footer อยู่ท้ายสุดของข้อความแชทเสมอ ไม่ตกขอบ
+            if is_ai_script_channel or is_full_script_creation or has_real_script:
+                if MANDATORY_SCRIPT_DISCLAIMER not in full_chat:
+                    full_chat = full_chat.rstrip() + MANDATORY_SCRIPT_DISCLAIMER
+
+            for part in split_long_text_for_discord(full_chat, chunk_size=1800):
+                await send_direct(part)
 
             # Deliver complete executable .luau file attachment
             target_fname = target_script_name if target_script_name.endswith((".lua", ".luau")) else f"{target_script_name}.luau"
