@@ -4,6 +4,7 @@ PBG Rock-Solid Production Service Runner for Render (Python 3.9 - 3.12+ complian
 - Standards-compliant HTTP 200 JSON Health Check with Content-Length & CORS
 - Resilient Bot Process Supervisor with Auto-Restart Loop
 - Zero-crash thread isolation: Health Check server never dies even if bot restarts
+- Cloud Mesh Keep-Alive Pinger to defeat 15m inactivity sleep
 """
 import http.server
 import json
@@ -42,7 +43,6 @@ class HealthHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
 
     def log_message(self, format, *args):
-        # Keep logs clean
         pass
 
 def run_health_server():
@@ -68,10 +68,48 @@ def run_bot_supervisor():
             print(f"❌ [Bot Supervisor Error] {e}. Retrying in {restart_delay}s...", flush=True)
         time.sleep(restart_delay)
 
+def run_mesh_pinger():
+    """
+    PBG Anti-Sleep Cloud Mesh Pinger
+    Sends HTTP heartbeats to all sibling Render microservices every 180s (3 min)
+    to permanently defeat Render's 15-minute inactivity spin-down.
+    """
+    import urllib.request
+
+    sibling_urls = [
+        "https://payomboyz-shop.onrender.com",
+        "https://payomboyz-crypto-exchange.onrender.com",
+        "https://payomboyz-getrole.onrender.com",
+        "https://payomboyz-bypass.onrender.com",
+        "https://sc-script-bot-0mtw.onrender.com",
+        "https://payomboyz-solve-bot-us.onrender.com",
+    ]
+
+    time.sleep(20)
+    print("⚡ [Mesh Pinger] Cloud keep-alive heartbeat loop active (interval: 180s)", flush=True)
+
+    while True:
+        for u in sibling_urls:
+            try:
+                req = urllib.request.Request(
+                    u,
+                    headers={"User-Agent": "PAYOMBOYZ-KeepAlive-Mesh/2.0"}
+                )
+                with urllib.request.urlopen(req, timeout=12) as resp:
+                    pass
+            except Exception:
+                pass
+        time.sleep(180)
+
+
 if __name__ == "__main__":
     # 1. Start HTTP Health Server in background daemon
     t_health = threading.Thread(target=run_health_server, daemon=True)
     t_health.start()
 
-    # 2. Start Bot Supervisor in main thread
+    # 2. Start Mesh Pinger in background daemon
+    t_pinger = threading.Thread(target=run_mesh_pinger, daemon=True)
+    t_pinger.start()
+
+    # 3. Start Bot Supervisor in main thread
     run_bot_supervisor()

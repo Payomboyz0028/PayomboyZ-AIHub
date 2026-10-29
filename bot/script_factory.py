@@ -34,6 +34,66 @@ class MultiAgentScriptFactory:
     """
 
     @classmethod
+    def _analyze_game_and_intent(cls, game_name: str, user_prompt: str, genre: str) -> Dict[str, Any]:
+        """
+        Deep Research & Intent Classifier:
+        Determines the game type and mechanics (Pet Steal, Gang/Event, Combat, Tycoon, etc.)
+        and extracts user-specified parameters like Tween Speed.
+        """
+        prompt_lower = (user_prompt or "").lower()
+        game_lower = (game_name or "").lower()
+
+        # Extract Speed (e.g. speed 160, spd 160, ความเร็ว 160)
+        speed_match = re.search(r'(?:speed|ความเร็ว|spd)\s*[:=]?\s*(\d+)', prompt_lower)
+        extracted_speed = int(speed_match.group(1)) if speed_match else (160 if ("tween" in prompt_lower or "บิน" in prompt_lower) else 250)
+
+        # Detect Category
+        is_pet_egg = any(k in prompt_lower or k in game_lower for k in [
+            "ride a pet", "rideapet", "egg", "pet", "ไข่", "ขโมยไข่", "สัตว์เลี้ยง", "hatch", "รัง"
+        ])
+        is_steal_or_transport = any(k in prompt_lower for k in [
+            "ขโมย", "steal", "พล็อต", "plot", "ขนไข่", "บินกลับ", "ส่งไข่", "รังไข่"
+        ])
+        is_gang_event = any(k in prompt_lower or k in game_lower for k in [
+            "สายเลือดอาชีวะ", "4kings", "อาชีวะ", "ฮาโลวีน", "halloween", "กิจกรรม", "event"
+        ])
+        is_combat = any(k in prompt_lower for k in [
+            "ตีมอน", "ตีบอส", "mob", "mobs", "enemy", "enemies", "ฟัน", "ดาบ", "killaura", "kill aura", "attack"
+        ])
+
+        if is_pet_egg or (is_steal_or_transport and "ไข่" in prompt_lower):
+            category = "pet_egg_steal"
+        elif is_gang_event:
+            category = "gang_event"
+        elif is_combat:
+            category = "combat_mob"
+        else:
+            category = "general_automation"
+
+        key_actions = []
+        if category == "pet_egg_steal":
+            key_actions.append(f"บินขโมยไข่ด้วย Tween (ความเร็ว {extracted_speed})")
+            key_actions.append("บินกลับพล็อตอัตโนมัติ")
+            key_actions.append("ระบบฟักไข่และสะสมสัตว์เลี้ยง")
+        elif category == "gang_event":
+            key_actions.append("รับและส่งเควสต์กิจกรรม (Halloween Event) อัตโนมัติ")
+            key_actions.append("ฟาร์มเหรียญ/ไอเทมกิจกรรมและวาร์ปตีเป้าหมาย")
+        elif category == "combat_mob":
+            key_actions.append("ค้นหามอนสเตอร์และตีอัตโนมัติ (Dynamic Killaura)")
+            key_actions.append("ฟาร์มเงินและเลเวลแบบวนลูป")
+        else:
+            key_actions.append("ระบบฟาร์มอัตโนมัติแบบปรับตัวตามโครงสร้างเกม")
+
+        return {
+            "category": category,
+            "extracted_speed": extracted_speed,
+            "key_actions": key_actions,
+            "is_pet_egg": is_pet_egg,
+            "is_gang_event": is_gang_event
+        }
+
+
+    @classmethod
     async def build_full_system_script(
         cls,
         game_info: Optional[Dict[str, Any]] = None,
@@ -50,7 +110,13 @@ class MultiAgentScriptFactory:
         genre = game_data.get("genre") or "Adventure"
         desc = game_data.get("description") or ""
 
-        print(f"[SCRIPT FACTORY] Initiating Multi-Agent Pipeline for '{game_name}' (Place: {place_id})...", flush=True)
+        # Phase 0: Intent & Game Category Analysis
+        intent = cls._analyze_game_and_intent(game_name, user_prompt, genre)
+        category = intent["category"]
+        extracted_speed = intent["extracted_speed"]
+        key_actions = intent["key_actions"]
+
+        print(f"[SCRIPT FACTORY] Initiating Multi-Agent Pipeline for '{game_name}' [Category: {category}, Speed: {extracted_speed}] (Place: {place_id})...", flush=True)
         start_time = time.time()
 
         # ----------------------------------------------------------------------
@@ -111,9 +177,12 @@ class MultiAgentScriptFactory:
         code_context = f"Existing Code Context:\n{attached_code[:4000]}\n\n" if attached_code else ""
         architect_prompt = (
             f"Game: {game_name} (Place ID: {place_id})\n"
-            f"Genre: {genre}\n"
-            f"Game Description: {desc[:600]}\n"
+            f"Genre: {genre} | Detected Category: {category}\n"
             f"User Requirement:\n{user_prompt}\n"
+            f"Movement Specification: Tween flight at speed {extracted_speed} studs/sec\n"
+            f"Key Behaviors: {', '.join(key_actions)}\n\n"
+            f"CRITICAL: If the category is '{category}' (e.g. egg stealing, pets, transport), DO NOT design combat mobs or 'Enemies' folder. "
+            f"Design specifically for: {', '.join(key_actions)}.\n\n"
             f"{ground_truth_context}\n\n"
             f"{code_context}"
             f"Output a complete, detailed architecture breakdown for the development agents."
@@ -149,10 +218,13 @@ class MultiAgentScriptFactory:
             "8. Output ONLY executable Luau code enclosed in ```lua ... ```."
         )
         engine_prompt = (
-            f"Target Game: {game_name} (PlaceId: {place_id})\n"
+            f"Target Game: {game_name} (PlaceId: {place_id}) | Category: {category}\n"
             f"User Request:\n{user_prompt}\n\n"
+            f"Movement Speed: {extracted_speed} studs/sec with TweenService\n"
             f"Authoritative Ground Truth (Network Remotes & Entities):\n{ground_truth_context[:3000]}\n\n"
             f"Architect Blueprint:\n{architecture_spec}\n\n"
+            f"CRITICAL: Tailor all functions to {category}. "
+            f"If stealing eggs or pets, find Eggs/Nests and Tween fly to player plot at speed {extracted_speed}. NEVER copy-paste a generic 'workspace.Mobs' template when not combat.\n"
             f"Write the entire Core Automation Engine now. Minimum 250+ lines of exhaustive, production-grade Luau."
         )
 
@@ -167,8 +239,13 @@ class MultiAgentScriptFactory:
         )
         engine_code = cls._extract_code(engine_res.get("reply", "")) if engine_res.get("success") else ""
         if not engine_code or len(engine_code.splitlines()) < 8:
-            print(f"[SCRIPT FACTORY] Stage 2 AI responder empty or hit quota. Synthesizing Ground Truth Core Engine...", flush=True)
-            engine_code = cls._generate_fallback_engine(game_name, place_id, ground_truth_context, user_prompt)
+            print(f"[SCRIPT FACTORY] Stage 2 AI responder empty or hit quota. Synthesizing Ground Truth Core Engine for '{category}'...", flush=True)
+            if category == "pet_egg_steal":
+                engine_code = cls._generate_pet_egg_steal_engine(game_name, place_id, extracted_speed)
+            elif category == "gang_event":
+                engine_code = cls._generate_event_engine(game_name, place_id, user_prompt)
+            else:
+                engine_code = cls._generate_fallback_engine(game_name, place_id, ground_truth_context, user_prompt)
         print(f"[SCRIPT FACTORY] Stage 2 (Core Engine) complete: {len(engine_code)} chars of pure Luau logic.", flush=True)
 
         # ----------------------------------------------------------------------
@@ -211,8 +288,8 @@ class MultiAgentScriptFactory:
         )
         ui_code = cls._extract_code(ui_res.get("reply", "")) if ui_res.get("success") else ""
         if not ui_code or len(ui_code.splitlines()) < 8:
-            print(f"[SCRIPT FACTORY] Stage 3 UI responder empty or hit quota. Synthesizing {ui_choice} Interface...", flush=True)
-            ui_code = cls._generate_fallback_ui(game_name, ui_choice)
+            print(f"[SCRIPT FACTORY] Stage 3 UI responder empty or hit quota. Synthesizing {ui_choice} Interface for '{category}'...", flush=True)
+            ui_code = cls._generate_fallback_ui(game_name, ui_choice, category, extracted_speed)
         print(f"[SCRIPT FACTORY] Stage 3 (UI Master) complete: {len(ui_code)} chars of UI code.", flush=True)
 
         # ----------------------------------------------------------------------
@@ -249,9 +326,11 @@ class MultiAgentScriptFactory:
         # ----------------------------------------------------------------------
         # STAGE 5: Conversational Summary Generation
         # ----------------------------------------------------------------------
+        actions_str = ", ".join(key_actions)
         summary_prompt = (
             f"คุณคือ PAYØMBØYZAA ตอบแชท {user_name} เป็นภาษาไทยแบบเพื่อนสนิท กวนๆ ปั่นๆ มั่นใจในฝีมือ "
-            f"สรุปสั้นๆ 1-2 ย่อหน้าว่าสร้างสคริปต์ {game_name} ให้แบบจัดเต็มระบบแล้ว พร้อมบอกฟีเจอร์เด่น (Auto Farm, ESP, ระบบ Bypass, UI {ui_choice}) "
+            f"สรุปสั้นๆ 1-2 ย่อหน้าว่าสร้างสคริปต์ {game_name} ให้แบบจัดเต็มระบบแล้ว โดยเน้นฟังก์ชันตรงตามที่ขอ: "
+            f"({actions_str}), ระบบ Tween บินความเร็ว {extracted_speed}, ระบบ Bypass ป้องกันตัวแป๊ก และ UI {ui_choice} สวยหรู "
             f"และบอกว่าแนบไฟล์สคริปต์ตัวเต็มไว้ให้ด้านล่างแล้ว ไม่ต้องมี code block ในแชท"
         )
         summary_res = await asyncio.to_thread(
@@ -300,6 +379,263 @@ class MultiAgentScriptFactory:
         code = "\n".join(lines).strip()
         if any(ind in code.lower() for ind in error_indicators) and not ("function" in code or "local " in code):
             return ""
+        return code
+
+    @classmethod
+    def _generate_pet_egg_steal_engine(cls, game_name: str, place_id: str, speed: int = 160) -> str:
+        """
+        Specialized Autonomous Engine for Pet & Egg Stealing games (e.g. Ride a Pet).
+        Implements dynamic egg locator, plot locator, noclip flight, and tween delivery loop at exact speed.
+        """
+        return f"""local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+local VirtualUser = game:GetService("VirtualUser")
+
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart", 10)
+local Humanoid = Character:WaitForChild("Humanoid", 10)
+
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    Character = newChar
+    HumanoidRootPart = newChar:WaitForChild("HumanoidRootPart", 10)
+    Humanoid = newChar:WaitForChild("Humanoid", 10)
+end)
+
+-- Observable Engine State for Ride A Pet / Egg Stealing
+local EngineState = {{
+    AutoStealEgg = false,
+    AutoReturnPlot = true,
+    FlySpeed = {speed},
+    Noclip = true,
+    AutoHatch = false,
+    SelectedEgg = "All",
+    EggESP = false
+}}
+
+-- Noclip Bypass Loop (Essential for smooth flight)
+RunService.Stepped:Connect(function()
+    if (EngineState.Noclip or EngineState.AutoStealEgg) and Character then
+        for _, part in ipairs(Character:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
+            end
+        end
+    end
+end)
+
+-- Precision Linear Flight Tween Engine
+local activeTween = nil
+local function TweenToPosition(targetPos, speed)
+    if not HumanoidRootPart then return end
+    speed = speed or EngineState.FlySpeed or {speed}
+    local distance = (HumanoidRootPart.Position - targetPos).Magnitude
+    local duration = math.clamp(distance / speed, 0.1, 120)
+    local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+    
+    if activeTween then
+        pcall(function() activeTween:Cancel() end)
+    end
+    
+    activeTween = TweenService:Create(HumanoidRootPart, tweenInfo, {{
+        CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
+    }})
+    activeTween:Play()
+    return activeTween, duration
+end
+
+-- Dynamic Plot Resolver (Finds the player's claimed base / plot)
+local function GetPlayerPlot()
+    local plotCandidates = {{
+        Workspace:FindFirstChild("Plots"),
+        Workspace:FindFirstChild("Bases"),
+        Workspace:FindFirstChild("PlayerPlots"),
+        Workspace:FindFirstChild("Houses")
+    }}
+    for _, folder in ipairs(plotCandidates) do
+        if folder then
+            for _, plot in ipairs(folder:GetChildren()) do
+                local ownerVal = plot:FindFirstChild("Owner") or plot:FindFirstChild("Player")
+                if ownerVal and (ownerVal.Value == LocalPlayer or ownerVal.Value == LocalPlayer.Name) then
+                    return plot
+                end
+                if plot.Name:lower():find(LocalPlayer.Name:lower()) then
+                    return plot
+                end
+            end
+            local firstPlot = folder:FindFirstChild(LocalPlayer.Name)
+            if firstPlot then return firstPlot end
+        end
+    end
+    local spawn = Workspace:FindFirstChild("SpawnLocation") or Workspace:FindFirstChildOfClass("SpawnLocation")
+    return spawn
+end
+
+-- Dynamic Egg / Nest Resolver
+local function GetTargetEggs()
+    local foundEggs = {{}}
+    local scanFolders = {{
+        Workspace:FindFirstChild("Eggs"),
+        Workspace:FindFirstChild("EggSpawns"),
+        Workspace:FindFirstChild("Nests"),
+        Workspace:FindFirstChild("Items"),
+        Workspace
+    }}
+    
+    for _, container in ipairs(scanFolders) do
+        if container then
+            for _, obj in ipairs(container:GetDescendants()) do
+                if obj:IsA("Model") or obj:IsA("BasePart") then
+                    local name = obj.Name:lower()
+                    if (name:find("egg") or name:find("nest") or name:find("loot")) and not name:find("gui") then
+                        local rootPart = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
+                        if rootPart and rootPart:IsDescendantOf(Workspace) then
+                            table.insert(foundEggs, {{
+                                Instance = obj,
+                                Position = rootPart.Position,
+                                Distance = (HumanoidRootPart and (HumanoidRootPart.Position - rootPart.Position).Magnitude) or 9999
+                            }})
+                        end
+                    end
+                end
+            end
+            if #foundEggs > 0 then break end
+        end
+    end
+    
+    table.sort(foundEggs, function(a, b) return a.Distance < b.Distance end)
+    return foundEggs
+end
+
+-- Egg Interaction Helper
+local function CollectEgg(eggInstance)
+    pcall(function()
+        for _, prompt in ipairs(eggInstance:GetDescendants()) do
+            if prompt:IsA("ProximityPrompt") then
+                fireproximityprompt(prompt, 0)
+            end
+        end
+        local part = eggInstance:IsA("BasePart") and eggInstance or eggInstance:FindFirstChildWhichIsA("BasePart")
+        if part and HumanoidRootPart then
+            firetouchinterest(HumanoidRootPart, part, 0)
+            task.wait(0.1)
+            firetouchinterest(HumanoidRootPart, part, 1)
+        end
+        for _, cd in ipairs(eggInstance:GetDescendants()) do
+            if cd:IsA("ClickDetector") then
+                fireclickdetector(cd)
+            end
+        end
+    end)
+end
+
+-- Main Steal & Flight Loop
+task.spawn(function()
+    while true do
+        task.wait(0.2)
+        if EngineState.AutoStealEgg and HumanoidRootPart and Humanoid and Humanoid.Health > 0 then
+            pcall(function()
+                local eggs = GetTargetEggs()
+                if #eggs > 0 then
+                    local targetEgg = eggs[1]
+                    local _, dur = TweenToPosition(targetEgg.Position, EngineState.FlySpeed)
+                    task.wait(dur + 0.15)
+                    
+                    CollectEgg(targetEgg.Instance)
+                    task.wait(0.25)
+                    
+                    if EngineState.AutoReturnPlot then
+                        local plot = GetPlayerPlot()
+                        if plot then
+                            local plotPos = plot:IsA("BasePart") and plot.Position or (plot:FindFirstChildWhichIsA("BasePart") and plot:FindFirstChildWhichIsA("BasePart").Position)
+                            if plotPos then
+                                local _, returnDur = TweenToPosition(plotPos, EngineState.FlySpeed)
+                                task.wait(returnDur + 0.2)
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+_G.PayomboyzEngineState = EngineState
+_G.PayomboyzTweenToPosition = TweenToPosition"""
+
+    @classmethod
+    def _generate_event_engine(cls, game_name: str, place_id: str, user_prompt: str) -> str:
+        """
+        Specialized Autonomous Engine for Seasonal Event & Gang games (e.g. สายเลือดอาชีวะ Halloween Event).
+        """
+        return f"""local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+local VirtualUser = game:GetService("VirtualUser")
+
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart", 10)
+local Humanoid = Character:WaitForChild("Humanoid", 10)
+
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    Character = newChar
+    HumanoidRootPart = newChar:WaitForChild("HumanoidRootPart", 10)
+    Humanoid = newChar:WaitForChild("Humanoid", 10)
+end)
+
+local EngineState = {{
+    AutoEventQuest = false,
+    AutoCollectTokens = false,
+    AutoAttackTargets = false,
+    TweenSpeed = 160,
+    Noclip = true
+}}
+
+RunService.Stepped:Connect(function()
+    if EngineState.Noclip and Character then
+        for _, part in ipairs(Character:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
+            end
+        end
+    end
+end)
+
+local function TweenTo(targetPos, speed)
+    if not HumanoidRootPart then return end
+    speed = speed or EngineState.TweenSpeed or 160
+    local distance = (HumanoidRootPart.Position - targetPos).Magnitude
+    local duration = math.clamp(distance / speed, 0.1, 60)
+    local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
+    local tween = TweenService:Create(HumanoidRootPart, tweenInfo, {{CFrame = CFrame.new(targetPos + Vector3.new(0, 4, 0))}})
+    tween:Play()
+    return tween, duration
+end
+
+_G.PayomboyzEngineState = EngineState
+_G.PayomboyzTweenTo = TweenTo"""
+
+    @classmethod
+    def _validate_and_repair_luau_syntax(cls, code: str) -> str:
+        """
+        Syntax Sanity Gate:
+        Verifies that code has balanced block openers and closers, and fixes minor missing ends.
+        """
+        if not code:
+            return code
+        
+        openers = len(re.findall(r'\b(function|then|do|repeat)\b', code))
+        closers = len(re.findall(r'\b(end|until)\b', code))
+        
+        diff = openers - closers
+        if 0 < diff <= 3:
+            code = code.rstrip() + "\n" + ("end\n" * diff)
+            print(f"[SCRIPT FACTORY] Auto-repaired {diff} missing 'end' statements in Luau syntax.", flush=True)
+            
         return code
 
     @classmethod
@@ -431,7 +767,80 @@ _G.PayomboyzEngineState = EngineState
 _G.PayomboyzTweenTo = TweenTo'''
 
     @classmethod
-    def _generate_fallback_ui(cls, game_name: str, ui_choice: str) -> str:
+    def _generate_fallback_ui(cls, game_name: str, ui_choice: str, category: str = 'general_automation', speed: int = 160) -> str:
+        if category == 'pet_egg_steal':
+            return f'''local Window = Fluent:CreateWindow({{
+    Title = "{game_name} Hub",
+    SubTitle = "PAYOMBØYZ Edition — Egg Steal Suite",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+}})
+
+local Tabs = {{
+    Steal = Window:AddTab({{ Title = "🥚 Egg Steal", Icon = "egg" }}),
+    Movement = Window:AddTab({{ Title = "🏃 Flight & Noclip", Icon = "plane" }}),
+    Visuals = Window:AddTab({{ Title = "👁️ ESP", Icon = "eye" }}),
+    Settings = Window:AddTab({{ Title = "⚙️ Settings", Icon = "settings" }})
+}}
+
+local EngineState = _G.PayomboyzEngineState or {{}}
+
+Tabs.Steal:AddToggle("AutoStealToggle", {{
+    Title = "Auto Steal Eggs (Fly & Collect)",
+    Default = false,
+    Callback = function(val)
+        EngineState.AutoStealEgg = val
+    end
+}})
+
+Tabs.Steal:AddToggle("AutoReturnToggle", {{
+    Title = "Auto Return to Plot",
+    Default = true,
+    Callback = function(val)
+        EngineState.AutoReturnPlot = val
+    end
+}})
+
+Tabs.Steal:AddSlider("FlySpeedSlider", {{
+    Title = "Tween Flight Speed",
+    Default = {speed},
+    Min = 50,
+    Max = 350,
+    Rounding = 0,
+    Callback = function(val)
+        EngineState.FlySpeed = val
+    end
+}})
+
+Tabs.Movement:AddToggle("NoclipToggle", {{
+    Title = "Noclip Wall Bypass",
+    Default = true,
+    Callback = function(val)
+        EngineState.Noclip = val
+    end
+}})
+
+Tabs.Visuals:AddToggle("EggESPToggle", {{
+    Title = "Egg & Nest ESP",
+    Default = false,
+    Callback = function(val)
+        EngineState.EggESP = val
+    end
+}})
+
+Tabs.Settings:AddButton({{
+    Title = "Rejoin Server",
+    Description = "Quickly reconnect to current game",
+    Callback = function()
+        game:GetService("TeleportService"):Teleport(game.PlaceId, game.Players.LocalPlayer)
+    end
+}})
+
+Window:SelectTab(1)'''
+
         return f'''local Window = Fluent:CreateWindow({{
     Title = "{game_name} Hub",
     SubTitle = "PAYOMBØYZ Edition",
@@ -522,7 +931,7 @@ Window:SelectTab(1)'''
         from bot.roblox_platform_intel import ROBLOX_INTEL
         server_hop = ROBLOX_INTEL.generate_safe_server_hop_snippet(place_id)
         date_str = time.strftime("%Y-%m-%d %H:%M:%S")
-        return f"""-- ==============================================================================
+        assembled_raw = f"""-- ==============================================================================
 -- [ {game_name.upper()} | UNIVERSAL AUTOMATION & CLIENT SUITE ]
 -- PlaceId: {place_id} | Build Date: {date_str}
 -- Target Executors: Solara, Wave, Delta, Codex, Arceus X, Synapse Z
@@ -566,6 +975,7 @@ pcall(function()
     end
 end)
 """
+        return cls._validate_and_repair_luau_syntax(assembled_raw)
 
     @classmethod
     async def _expand_and_heal_script(cls, script: str, user_prompt: str, game_name: str) -> str:
