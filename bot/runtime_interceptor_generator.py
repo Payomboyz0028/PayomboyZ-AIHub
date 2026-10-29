@@ -6,6 +6,7 @@
 - Compatible with: Real, Delta, Wave, Solara, Synapse Z, Xeno, MacSploit, Argon, etc.
 - Multi-Stage Snooper: Luarmor, Jnkie, Polsec V2, Fulcrum WebSockets, Luraph, MoonSec VM
 - Intercepts all network sinks: game:HttpGet, game:HttpGetAsync, request, syn.request
+- Intelligent Asset Filter: Blocks UI icon/spritesheet tables from overwriting real scripts
 - Auto-copies recovered genuine source code to Windows Clipboard (Ctrl+V) instantly
 - Auto-saves dumped raw payload to: workspace/Latest_Captured_Script.luau & Captured_Scripts/
 ========================================================================================
@@ -31,6 +32,9 @@ RUNTIME_INTERCEPTOR_LUAU = """--!nocheck
 --   • All Network Sinks (HttpGet, HttpGetAsync, request, syn.request, http_request)
 --   • All Dynamic Execution Sinks (loadstring, load, loadfile)
 --   • Unpacked Closure Tables (setmetatable module dumps)
+-- Intelligent Filter:
+--   • Filters out UI asset tables (Tree Hub CLI, Lucide icons, Spritesheets)
+--   • Prevents icon libraries from overwriting your game script in clipboard!
 -- ==============================================================================
 
 if getgenv and getgenv().__PAYOMBOYZ_DUMPER_LOADED then
@@ -44,6 +48,7 @@ pcall(function() G.__PAYOMBOYZ_DUMPER_LOADED = true end)
 print("==================================================================")
 print("🚀 [PAYOMBØYZ] UNIVERSAL ZERO-DAY AUTOEXEC SCRIPT DUMPER INITIALIZED")
 print("🎯 Targets: Luarmor, Jnkie, Polsec, Luraph, HttpGet & All Loaders")
+print("🛡️ Asset Filter: ACTIVE (Icons/Spritesheets will NOT stomp clipboard)")
 print("📋 Auto-Copy to Clipboard: ACTIVE (Ctrl+V immediately after execution)")
 print("💾 Workspace Backup: workspace/Latest_Captured_Script.luau")
 print("==================================================================")
@@ -51,6 +56,8 @@ print("==================================================================")
 local real_loadstring   = loadstring or (G and G.loadstring)
 local real_load         = load or (G and G.load)
 local real_writefile    = writefile or (G and G.writefile)
+local real_readfile     = readfile or (G and G.readfile)
+local real_appendfile   = appendfile or (G and G.appendfile)
 local real_makefolder   = makefolder or (G and G.makefolder)
 local real_isfolder     = isfolder or (G and G.isfolder)
 local real_setclipboard = setclipboard or toclipboard or (G and G.setclipboard) or (Clipboard and Clipboard.set) or writeclipboard
@@ -58,8 +65,13 @@ local real_hookfunc     = hookfunction or replaceclosure or (G and G.hookfunctio
 
 -- Ensure workspace directory structure
 pcall(function()
-    if real_makefolder and real_isfolder and not real_isfolder("Captured_Scripts") then
-        real_makefolder("Captured_Scripts")
+    if real_makefolder and real_isfolder then
+        if not real_isfolder("Captured_Scripts") then
+            real_makefolder("Captured_Scripts")
+        end
+        if not real_isfolder("Captured_Scripts/Assets") then
+            real_makefolder("Captured_Scripts/Assets")
+        end
     end
 end)
 
@@ -89,10 +101,11 @@ pcall(function()
 end)
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 2. DUMPING ENGINE & INSTANT CLIPBOARD PIPELINE
+-- 2. INTELLIGENT ASSET & PAYLOAD CLASSIFICATION ENGINE
 -- ─────────────────────────────────────────────────────────────────────────────
 local capturedHashes = {}
 local dumpCount = 0
+local highestClipboardPriority = 0
 
 local function fastHash(s)
     local h = 5381
@@ -104,27 +117,88 @@ local function fastHash(s)
     return string.format("%d_%08x", len, h)
 end
 
-local function isPlausibleScript(src)
-    if not src or type(src) ~= "string" or #src < 100 then return false end
+-- Detects whether a string is a pure UI icon table, font mapping, or spritesheet
+local function isAssetOrIconTable(src)
+    if not src or type(src) ~= "string" then return true end
     
-    if src:find("PAYOMBOYZ_DUMPER_LOADED") or src:find("Universal AutoExecute Script Dumper") then
-        return false
+    if src:find("Tree Hub CLI") or src:find("moderated icons") or src:find("Spritesheets =") 
+       or src:find("Apple SF Symbols") or src:find("7330 icons") or src:find("LucideIcons") then
+        return true
+    end
+
+    local _, assetCount = src:gsub("rbxassetid://", "")
+    if assetCount > 4 then
+        local lines = #string.split(src, "\\n")
+        if assetCount / math.max(1, lines) > 0.25 then
+            return true
+        end
+    end
+
+    if src:match("^%s*return%s*%{") and not src:find("function") and not src:find("local ") and not src:find("GetService") then
+        return true
+    end
+
+    return false
+end
+
+-- Scores payload to determine priority for clipboard & primary output
+local function scorePayload(src)
+    if isAssetOrIconTable(src) then
+        return 0, "ASSET_TABLE"
+    end
+
+    local isGameScript = false
+    if src:find("FireServer") or src:find("InvokeServer") or src:find("VirtualInputManager") 
+       or src:find("HumanoidRootPart") or src:find("hookfunction") or src:find("hookmetamethod")
+       or src:find("LPH-") or src:find("LPH_") or src:find("Luarmor") or src:find("v4_init")
+       or src:find("MoonSec") or src:find("PSC4N") or src:find("Polsec") or src:find("superflow")
+       or src:find("CurrentRoundClient") or src:find("GunDrop") or src:find("KnifeServer") then
+        return 100, "GAME_PAYLOAD"
+    end
+
+    if src:find("CreateWindow") or src:find("AddTab") or src:find("CreateTab") or src:find("AddSection") or src:find("Theme =") then
+        return 60, "UI_LIBRARY"
+    end
+
+    return 40, "GENERIC_SCRIPT"
+end
+
+local function appendManifest(entryText)
+    if not real_writefile then return end
+    pcall(function()
+        local manifestPath = "Captured_Scripts/MANIFEST.txt"
+        local ts = os.date("!%Y-%m-%d %H:%M:%SZ")
+        local line = string.format("[%s] %s\\n", tostring(ts), entryText)
+        if real_appendfile then
+            real_appendfile(manifestPath, line)
+        else
+            local existing = ""
+            if real_readfile then
+                pcall(function() existing = real_readfile(manifestPath) or "" end)
+            end
+            real_writefile(manifestPath, existing .. line)
+        end
+    end)
+end
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 3. HARVEST PIPELINE (DEDUPLICATES, CLASSIFIES, AND COPIES TO CLIPBOARD)
+-- ─────────────────────────────────────────────────────────────────────────────
+local function harvestScript(src, origin, extraInfo)
+    if not src or type(src) ~= "string" or #src < 100 then return end
+
+    if src:find("PAYOMBOYZ_DUMPER_LOADED") or src:find("UNIVERSAL ZERO-DAY AUTOEXEC SCRIPT DUMPER") then
+        return
     end
 
     if src:find("Zstd decoder adapted from") or src:find("101arrowz/fzstd") then
-        return false
+        return
     end
 
     local low = src:sub(1, 200):lower()
     if low:find("<!doctype html") or low:find("<html") or low:find("<head>") then
-        return false
+        return
     end
-
-    return true
-end
-
-local function harvestScript(src, origin, extraInfo)
-    if not isPlausibleScript(src) then return end
 
     local h = fastHash(src)
     if capturedHashes[h] then return end
@@ -133,44 +207,71 @@ local function harvestScript(src, origin, extraInfo)
     dumpCount = dumpCount + 1
     local lineCount = #string.split(src, "\\n")
     local sizeBytes = #src
+    local prio, tag = scorePayload(src)
+    local timeStampStr = tostring(os.date("%Y%m%d_%H%M%S"))
 
-    print("==================================================================")
-    print(string.format("🎉 [PAYOMBØYZ] CAPTURED SCRIPT PAYLOAD #%d!", dumpCount))
-    print(string.format("   Origin: %s %s", tostring(origin), extraInfo and ("(" .. tostring(extraInfo) .. ")") or ""))
-    print(string.format("   Size: %d bytes | Lines: %d", sizeBytes, lineCount))
-    print("   📋 STATUS: COPIED DIRECTLY TO WINDOWS CLIPBOARD (Ctrl+V)!")
-    print("   💾 BACKUP: workspace/Latest_Captured_Script.luau")
-    print("==================================================================")
-
-    -- 1. Copy directly to Windows Clipboard (Ctrl+V)
-    if real_setclipboard then
-        pcall(function() real_setclipboard(src) end)
+    -- CASE A: PURE ASSET / ICON TABLE (TIER 0) - NEVER STOMPS THE CLIPBOARD!
+    if prio == 0 then
+        if real_writefile then
+            pcall(function()
+                local assetFile = string.format("Captured_Scripts/Assets/Asset_%s_%d.luau", timeStampStr, dumpCount)
+                real_writefile(assetFile, src)
+            end)
+        end
+        print(string.format("🛡️ [PAYOMBØYZ:ASSET_FILTER] Ignored Icon/Asset Table #%d (%d bytes) from %s - Kept real script in clipboard!", dumpCount, sizeBytes, tostring(origin)))
+        appendManifest(string.format("Filtered Asset #%d (%d bytes) from %s [%s] -> Saved to Assets/", dumpCount, sizeBytes, tostring(origin), tostring(extraInfo or "")))
+        return
     end
 
-    -- 2. Save directly to workspace root for instant access
+    -- CASE B: VALID SCRIPT PAYLOAD (TIER 40 - 100)
+    print("==================================================================")
+    print(string.format("🎉 [PAYOMBØYZ] CAPTURED SCRIPT #%d [%s | Priority: %d]!", dumpCount, tag, prio))
+    print(string.format("   Origin: %s %s", tostring(origin), extraInfo and ("(" .. tostring(extraInfo) .. ")") or ""))
+    print(string.format("   Size: %d bytes | Lines: %d", sizeBytes, lineCount))
+
+    local scriptFilename = string.format("Captured_Scripts/Script_%s_%s_%d.luau", tag, timeStampStr, dumpCount)
     if real_writefile then
         pcall(function()
-            real_writefile("Latest_Captured_Script.luau", src)
-            real_writefile("PAYOMBOYZ_DUMPED_RAW.luau", src)
-            
-            -- Save timestamped version into archive folder
-            local filename = string.format("Captured_Scripts/Script_%s_%d.luau", tostring(os.date("%Y%m%d_%H%M%S")), dumpCount)
-            real_writefile(filename, src)
+            real_writefile(scriptFilename, src)
         end)
     end
 
-    -- 3. Visual In-Game Notification
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "🎉 SCRIPT CAPTURED (COPIED)!",
-            Text = string.format("ดึงโค้ด %s สำเร็จ (%d bytes) กด Ctrl+V ได้เลย!", tostring(origin), sizeBytes),
-            Duration = 6
-        })
-    end)
+    local isPromotedToClipboard = false
+    if prio >= highestClipboardPriority then
+        highestClipboardPriority = prio
+        isPromotedToClipboard = true
+
+        if real_setclipboard then
+            pcall(function() real_setclipboard(src) end)
+        end
+
+        if real_writefile then
+            pcall(function()
+                real_writefile("Latest_Captured_Script.luau", src)
+                real_writefile("PAYOMBOYZ_DUMPED_RAW.luau", src)
+            end)
+        end
+
+        print("   📋 STATUS: PROMOTED TO WINDOWS CLIPBOARD (Ctrl+V)!")
+        print("   💾 BACKUP: workspace/Latest_Captured_Script.luau")
+
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = string.format("🎉 %s CAPTURED!", tag),
+                Text = string.format("กู้คืนโค้ดสำเร็จ (%d KB) กด Ctrl+V ได้เลย!", math.floor(sizeBytes / 1024)),
+                Duration = 6
+            })
+        end)
+    else
+        print("   📁 STATUS: Saved to Captured_Scripts (Preserved higher-priority script in clipboard)")
+    end
+
+    print("==================================================================")
+    appendManifest(string.format("Captured #%d [%s | Prio %d] (%d bytes) from %s [%s] -> %s", dumpCount, tag, prio, sizeBytes, tostring(origin), tostring(extraInfo or ""), isPromotedToClipboard and "[COPIED TO CLIPBOARD]" or "[STORED IN VAULT]"))
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 3. UNIVERSAL NETWORK SINK HOOKS (JNKIE, SCRIPTBLOX, LUARMOR CDN, GITHUB)
+-- 4. UNIVERSAL NETWORK SINK HOOKS (JNKIE, SCRIPTBLOX, LUARMOR CDN, GITHUB)
 -- ─────────────────────────────────────────────────────────────────────────────
 pcall(function()
     if not real_hookfunc then return end
@@ -238,7 +339,7 @@ pcall(function()
 end)
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 4. MULTI-STAGE POLSEC & FULCRUM CODEC SNOOPER (DECODECACHE / WEBSOCKET)
+-- 5. MULTI-STAGE POLSEC & FULCRUM CODEC SNOOPER (DECODECACHE / WEBSOCKET)
 -- ─────────────────────────────────────────────────────────────────────────────
 local function wrapEnclibModule(codecModule)
     if type(codecModule) ~= "table" or not codecModule.new then
@@ -281,13 +382,12 @@ local function wrapEnclibModule(codecModule)
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 5. UNIVERSAL LOADSTRING / LOAD / LOADFILE SINK INTERCEPTOR
+-- 6. UNIVERSAL LOADSTRING / LOAD / LOADFILE SINK INTERCEPTOR
 -- ─────────────────────────────────────────────────────────────────────────────
 local function universalTrap(codeStr, chunkName)
     local src = tostring(codeStr or "")
     local chunk = tostring(chunkName or "anonymous")
 
-    -- [STAGE 1] Detect Polsec Enclib Codec
     if src:find("Zstd decoder") or src:find("101arrowz") or src:find("decodeCache") or src:find("PSC4N") then
         print(string.format("⚡ [SPY:STAGE_1] Polsec Codec Intercepted (%d bytes) - Compiling and hooking...", #src))
         
@@ -302,7 +402,6 @@ local function universalTrap(codeStr, chunkName)
         end
     end
 
-    -- [STAGE 2] Universal Luarmor / Jnkie / Luraph / Raw Script Interception
     if #src >= 100 then
         local originTag = "loadstring"
         if src:find("LPH-") or src:find("LPH_") or src:find("Luraph") then
@@ -339,7 +438,7 @@ pcall(function() getfenv().load = finalHook end)
 pcall(function() if _G then _G.load = finalHook end end)
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 6. SETMETATABLE HOOK (Luarmor V4 / Luraph VM Unpacked Module Tables)
+-- 7. SETMETATABLE HOOK (Luarmor V4 / Luraph VM Unpacked Module Tables)
 -- ─────────────────────────────────────────────────────────────────────────────
 local old_setmetatable = real_hookfunc and (getgenv and getgenv().setmetatable or setmetatable)
 if old_setmetatable and real_hookfunc then
@@ -411,6 +510,9 @@ def build_unbreakable_guide_embed() -> discord.Embed:
         description=(
             "**ตัวดักจับระดับสากล (Universal Anti-Obfuscation & In-Game RAM Sniffer)**\n"
             "รองรับการดักจับสคริปต์ทุกชนิด: **Luarmor V4/V5, Jnkie, ScriptBlox, Polsec V2 Streaming, Luraph VM, MoonSec VM, HttpGet, request()**\n\n"
+            "🛡️ **ระบบป้องกัน Asset Stomping (ใหม่ล่าสุด!):**\n"
+            "• คัดกรองและแยกแยะตารางไอคอนของ UI Library (เช่น Tree Hub CLI, Lucide icons, Spritesheets) ไม่ให้ไปแย่งพื้นที่คลิปบอร์ดของโค้ดเกมแท้\n"
+            "• โค้ดเกมตัวหลักจะถูกดันขึ้น **Priority 100** เข้า Clipboard เสมอ\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "👉 **วิธีใช้งานเพื่อดึง Source Code แท้ (Auto-Copy ลง Clipboard):**\n\n"
             "**1️⃣ ดาวน์โหลดไฟล์ Dumper**\n"
@@ -422,11 +524,10 @@ def build_unbreakable_guide_embed() -> discord.Embed:
             "**3️⃣ รันสคริปต์เป้าหมาย & รับโค้ดทันที**\n"
             "• รันสคริปต์ Luarmor, Jnkie, หรือตัวใดก็ตามที่คุณต้องการแกะ\n"
             "• **โค้ดที่แท้จริงจะถูก Copy ลง Windows Clipboard อัตโนมัติทันที!** (กด `Ctrl + V` เพื่อวางโค้ดได้เลย)\n"
-            "• พร้อมทั้งบันทึกไฟล์สำรองไว้ที่ `workspace/Latest_Captured_Script.luau` ในเครื่องของคุณ\n"
-            "• นำโค้ดที่ได้มาส่งกลับเข้าบอทเพื่อทำการ Refactor & Clean AST ได้ทันที!\n"
+            "• สคริปต์ทั้งหมดจะถูกบันทึกสำรองไว้ที่โฟลเดอร์ `workspace/Captured_Scripts/` และมีไฟล์ `MANIFEST.txt` สรุปให้ครบทุกตัว!\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         ),
         color=discord.Color.from_rgb(0, 230, 150)
     )
-    embed.set_footer(text="PAYOMBØYZ ZERO-DAY FORENSICS • Luarmor • Jnkie • Polsec • Luraph • 100% Precision")
+    embed.set_footer(text="PAYOMBØYZ ZERO-DAY FORENSICS • Intelligent Asset Filter • 100% Precision")
     return embed
