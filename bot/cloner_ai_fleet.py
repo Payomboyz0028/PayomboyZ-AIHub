@@ -68,11 +68,26 @@ def _load_fleet_keys(prefix: str) -> List[str]:
 CLONER_GEMINI_KEYS: List[str] = _load_fleet_keys("CLONER_GEMINI") or _load_fleet_keys("GEMINI")
 CLONER_BLUEZY_KEYS: List[str] = _load_fleet_keys("CLONER_BLUEZY") or _load_fleet_keys("BLUEZY")
 CLONER_DEEPSEEK_KEYS: List[str] = _load_fleet_keys("CLONER_DEEPSEEK") or _load_fleet_keys("DEEPSEEK")
+CLONER_OPENROUTER_KEYS: List[str] = _load_fleet_keys("CLONER_OPENROUTER") or _load_fleet_keys("OPENROUTER")
 
-BLUEZY_BASE_URL: str = os.getenv("BLUEZY_BASE_URL", "https://bluezygpt.space/api/v1")
-BLUEZY_MODEL: str = os.getenv("BLUEZY_MODEL", "bluezygpt-free")
+# Guarantee primary OpenRouter key from environment is always front of rotation
+DJ_OPENROUTER_PRIMARY = os.getenv("OPENROUTER_API_KEY", "")
+if DJ_OPENROUTER_PRIMARY and DJ_OPENROUTER_PRIMARY not in CLONER_OPENROUTER_KEYS:
+    CLONER_OPENROUTER_KEYS.insert(0, DJ_OPENROUTER_PRIMARY)
+
+BLUEZY_BASE_URL: str = os.getenv("CLONER_BLUEZY_BASE_URL", os.getenv("BLUEZY_BASE_URL", "https://bluezygpt.space/api/v1"))
+BLUEZY_MODEL: str = os.getenv("CLONER_BLUEZY_MODEL", "bluezygpt-free")
 
 DEEPSEEK_BASE_URL: str = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+OPENROUTER_BASE_URL: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+
+# OpenRouter Free Models Priority (Active 0-cost, High Capacity)
+OPENROUTER_FREE_MODELS = [
+    os.getenv("CLONER_OPENROUTER_MODEL", "cohere/north-mini-code:free"),
+    os.getenv("CLONER_OPENROUTER_REASONING_MODEL", "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"),
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "nvidia/nemotron-3.5-lightning:free"
+]
 
 # Gemini Models Priority (Best Free Models with 100% Stability & Zero Hallucination)
 GEMINI_MODELS_PRIORITY = [
@@ -90,8 +105,8 @@ GEMINI_MODELS_PRIORITY = [
 class ClonerAIClient:
     """
     High-throughput, zero-downtime inference client for the 20-agent fleet.
-    Rotates keys across Gemini, implements a fast circuit-breaker for Bluezy,
-    and falls back seamlessly without ever breaking the build.
+    Rotates keys across Gemini (18,000 req/day) and OpenRouter (400 req/day free tier),
+    implements a fast circuit-breaker for Bluezy, and falls back seamlessly.
     """
 
     def __init__(self):
@@ -99,7 +114,9 @@ class ClonerAIClient:
         self._gemini_idx = 0
         self._bluezy_idx = 0
         self._deepseek_idx = 0
+        self._openrouter_idx = 0
         self._bluezy_cooldown_until = 0.0
+        self._openrouter_cooldown_until = 0.0
         self._session = requests.Session()
         retry_strategy = Retry(
             total=2,
@@ -126,6 +143,63 @@ class ClonerAIClient:
             key = CLONER_BLUEZY_KEYS[self._bluezy_idx % len(CLONER_BLUEZY_KEYS)]
             self._bluezy_idx += 1
             return key
+
+    def _next_openrouter_key(self) -> str:
+        with self._lock:
+            if not CLONER_OPENROUTER_KEYS:
+                return ""
+            key = CLONER_OPENROUTER_KEYS[self._openrouter_idx % len(CLONER_OPENROUTER_KEYS)]
+            self._openrouter_idx += 1
+            return key
+
+    def query_openrouter(self, system_prompt: str, user_prompt: str, preferred_model: Optional[str] = None, timeout: int = 15) -> Optional[str]:
+        """
+        Queries OpenRouter with round-robin key rotation across free-tier keys (50 req/day per key).
+        Supports automatic model fallback and handles both 'content' and 'reasoning' fields.
+        """
+        now = time.time()
+        if now < self._openrouter_cooldown_until or not CLONER_OPENROUTER_KEYS:
+            return None
+
+        models = [preferred_model] if preferred_model else OPENROUTER_FREE_MODELS
+        for target_model in models:
+            for _ in range(min(len(CLONER_OPENROUTER_KEYS), 3)):
+                key = self._next_openrouter_key()
+                url = f"{OPENROUTER_BASE_URL}/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {key}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://payomboyz.local",
+                    "X-Title": "PAYOMBØYZ-ClonerFleet"
+                }
+                payload = {
+                    "model": target_model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "max_tokens": 4096,
+                    "temperature": 0.2
+                }
+                try:
+                    resp = self._session.post(url, headers=headers, json=payload, timeout=timeout)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        choices = data.get("choices", [])
+                        if choices:
+                            msg = choices[0].get("message", {})
+                            res = msg.get("content") or msg.get("reasoning")
+                            if res and res.strip():
+                                return res.strip()
+                    elif resp.status_code == 429:
+                        time.sleep(0.3)
+                        continue
+                    elif resp.status_code == 404:
+                        break
+                except Exception:
+                    continue
+
+        return None
 
     def query_bluezy(self, system_prompt: str, user_prompt: str, timeout: int = 6) -> Optional[str]:
         """
@@ -215,21 +289,34 @@ class ClonerAIClient:
 
         return None
 
-    def ask(self, system_prompt: str, user_prompt: str, uncensored_priority: bool = False) -> str:
+    def ask(self, system_prompt: str, user_prompt: str, uncensored_priority: bool = False, prefer_openrouter: bool = False) -> str:
         """
         Unified ask method:
-        If uncensored_priority is requested (e.g. offensive reverse engineering / exploit logic),
-        tries Bluezy first. If Bluezy fails/times out, immediately falls back to Gemini!
+        1. If uncensored/offensive priority, tries Bluezy.
+        2. If prefer_openrouter or high-precision code/reasoning is requested, tries OpenRouter free pool.
+        3. Primary robust generation via Google Gemini (18,000 req/day pool).
+        4. Secondary fallback to OpenRouter if Gemini had issues.
+        5. Fallback to Gemini 3.5 Flash-Lite.
         """
         if uncensored_priority:
             bluezy_res = self.query_bluezy(system_prompt, user_prompt)
             if bluezy_res:
                 return bluezy_res
 
+        if prefer_openrouter:
+            or_res = self.query_openrouter(system_prompt, user_prompt)
+            if or_res:
+                return or_res
+
         # Primary robust generation via Gemini
         gemini_res = self.query_gemini(system_prompt, user_prompt)
         if gemini_res:
             return gemini_res
+
+        # Fallback to OpenRouter if Gemini encounters rate-limits
+        or_res = self.query_openrouter(system_prompt, user_prompt)
+        if or_res:
+            return or_res
 
         # Fallback to lite model
         lite_res = self.query_gemini(system_prompt, user_prompt, model="gemini-3.5-flash-lite")

@@ -19,11 +19,9 @@ if env_file.exists():
                 k, v = line.split("=", 1)
                 os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
-import base64
-_SAFE_AI_TOKEN = base64.b64decode("TVRVME1UQXhNelE1T1RRME9UUTFNRFV5TmcuR3ducktvLmZsTjhHUTRyZi15TjhhZnNBRkJjZlBoelQyOGhOWjVERDVzeXMw").decode("utf-8")
-DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN") or _SAFE_AI_TOKEN
+DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "")
 DISCORD_ROLE_BOT_TOKEN = os.environ.get("DISCORD_ROLE_BOT_TOKEN", "")
-DISCORD_AI_BOT_TOKEN = os.environ.get("DISCORD_AI_BOT_TOKEN") or _SAFE_AI_TOKEN
+DISCORD_AI_BOT_TOKEN = os.environ.get("DISCORD_AI_BOT_TOKEN", "")
 
 # Discord Client Credentials & OAuth2 Settings
 DISCORD_ROLE_BOT_CLIENT_ID = os.environ.get("DISCORD_ROLE_BOT_CLIENT_ID", os.environ.get("DISCORD_CLIENT_ID", "1548921066833838080"))
@@ -51,19 +49,12 @@ for i in range(2, 40):
 
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 
-# DeepSeek Official API Multi-Key Pool (Primary High-Precision Logic & CFF Decompiler)
-DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
-DEEPSEEK_REASONER_MODEL = os.environ.get("DEEPSEEK_REASONER_MODEL", "deepseek-reasoner")  # R1 chain-of-thought for hard decompile tasks
+# DeepSeek Official API (Disabled per dj - non-free API)
+# All tasks route 100% via Free Tier providers (Gemini, Bluezy, OpenRouter Free, ThaiLLM)
+DEEPSEEK_BASE_URL = ""
+DEEPSEEK_MODEL = "deepseek-chat"
+DEEPSEEK_REASONER_MODEL = "deepseek-reasoner"
 DEEPSEEK_OFFICIAL_KEYS = []
-raw_official_keys = os.environ.get("DEEPSEEK_OFFICIAL_KEYS", "")
-if raw_official_keys:
-    DEEPSEEK_OFFICIAL_KEYS = [k.strip() for k in raw_official_keys.split(",") if k.strip()]
-
-for i in range(1, 40):
-    k = os.environ.get(f"DEEPSEEK_API_KEY_{i}")
-    if k and k.strip() and not k.startswith("sk-or-v1-") and k.strip() not in DEEPSEEK_OFFICIAL_KEYS:
-        DEEPSEEK_OFFICIAL_KEYS.append(k.strip())
 
 # OpenRouter DeepSeek (Free Tier Pool - 50 Req/Day per Key Fallback)
 OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
@@ -78,8 +69,8 @@ for i in range(1, 40):
     if k and k.strip() and k.strip() not in OPENROUTER_API_KEYS:
         OPENROUTER_API_KEYS.append(k.strip())
 
-# Combined DeepSeek Key Pool (Official + OpenRouter)
-DEEPSEEK_API_KEYS = list(DEEPSEEK_OFFICIAL_KEYS)
+# Combined DeepSeek Key Pool (OpenRouter Free Tier only)
+DEEPSEEK_API_KEYS = []
 for k in OPENROUTER_API_KEYS:
     if k not in DEEPSEEK_API_KEYS:
         DEEPSEEK_API_KEYS.append(k)
@@ -87,7 +78,7 @@ raw_ds_keys = os.environ.get("DEEPSEEK_API_KEYS", "")
 if raw_ds_keys:
     for k in raw_ds_keys.split(","):
         k = k.strip()
-        if k and k not in DEEPSEEK_API_KEYS:
+        if k and k.startswith("sk-or-") and k not in DEEPSEEK_API_KEYS:
             DEEPSEEK_API_KEYS.append(k)
 
 # BluezyGPT Workers (Deep Deobfuscation & Reverse Engineering - Multi-Key Pool)
