@@ -429,6 +429,16 @@ Key Elements:
         except Exception as r_err:
             print(f"[KNOWLEDGE ROUTER] Rscripts harvester error: {r_err}", flush=True)
 
+        # Step 4: Precision Live Roblox Web Research (DuckDuckGo + Bing TLS Engine)
+        try:
+            from bot.roblox_live_researcher import RobloxLiveResearcher
+            web_gt = RobloxLiveResearcher.build_ai_context_block(game_name, user_prompt)
+            if web_gt:
+                print(f"[KNOWLEDGE ROUTER] Sourced live web ground truth for '{game_name}'.", flush=True)
+                return f"{web_gt}\n\n{self.get_bypass_knowledge()}"
+        except Exception as w_err:
+            print(f"[KNOWLEDGE ROUTER] Web research notice: {w_err}", flush=True)
+
         return self.get_bypass_knowledge()
 
 
