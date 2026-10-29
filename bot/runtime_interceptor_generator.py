@@ -4,7 +4,8 @@
 🌪️ PAYOMBØYZ RUNTIME MEMORY INTERCEPTOR & ZERO-DAY AUTO-DUMPER GENERATOR
 - Generates 100% executable Luau AutoExecute & Runtime Memory Interceptors for Executors
 - Compatible with: Real, Delta, Wave, Solara, Synapse Z, Xeno, MacSploit, Argon, etc.
-- Multi-Stage Snooper: Polsec V2, Fulcrum WebSockets, Luarmor V4, Luraph VM, MoonSec VM
+- Multi-Stage Snooper: Luarmor, Jnkie, Polsec V2, Fulcrum WebSockets, Luraph, MoonSec VM
+- Intercepts all network sinks: game:HttpGet, game:HttpGetAsync, request, syn.request
 - Auto-copies recovered genuine source code to Windows Clipboard (Ctrl+V) instantly
 - Auto-saves dumped raw payload to: workspace/Latest_Captured_Script.luau & Captured_Scripts/
 ========================================================================================
@@ -19,13 +20,21 @@ RUNTIME_INTERCEPTOR_LUAU = """--!nocheck
 -- ==============================================================================
 -- [PAYOMBØYZ GODMODE UNIVERSAL ZERO-DAY SCRIPT INTERCEPTOR & AUTO-DUMPER]
 -- Path: AutoExecute (e.g. Real/autoexec/ or run before target script)
--- Powered by: PAYOMBØYZ CYBER-AI (Autonomous Forensics & Runtime Unpacker)
+-- Powered by: PAYOMBØYZ CYBER-AI (Autonomous Forensics & Universal Memory Unpacker)
 -- Target Output: Windows Clipboard (Ctrl+V) & workspace/Latest_Captured_Script.luau
 -- Compatible with: Real, Delta, Wave, Solara, Synapse Z, Xeno, MacSploit, Celery
+-- Intercepts:
+--   • Luarmor (V4/V5 init scripts & CDN payloads)
+--   • Jnkie / ScriptBlox / Rscripts / Pastebin / GitHub Raw
+--   • Polsec V2 / Fulcrum Cloud Streaming WebSockets (decodeCache)
+--   • Luraph VM / MoonSec VM / IronBrew / PSU VM Bytecode
+--   • All Network Sinks (HttpGet, HttpGetAsync, request, syn.request, http_request)
+--   • All Dynamic Execution Sinks (loadstring, load, loadfile)
+--   • Unpacked Closure Tables (setmetatable module dumps)
 -- ==============================================================================
 
 if getgenv and getgenv().__PAYOMBOYZ_DUMPER_LOADED then
-    print("🔁 [PAYOMBØYZ] Auto-Dumper already active in memory.")
+    print("🔁 [PAYOMBØYZ] Universal Auto-Dumper is already active in memory.")
     return
 end
 
@@ -33,9 +42,10 @@ local G = (getgenv and getgenv()) or _G
 pcall(function() G.__PAYOMBOYZ_DUMPER_LOADED = true end)
 
 print("==================================================================")
-print("🚀 [PAYOMBØYZ] Universal AutoExecute Script Dumper Initialized!")
-print("🎯 Monitoring: loadstring, load, decodeCache, and Dynamic Sinks...")
+print("🚀 [PAYOMBØYZ] UNIVERSAL ZERO-DAY AUTOEXEC SCRIPT DUMPER INITIALIZED")
+print("🎯 Targets: Luarmor, Jnkie, Polsec, Luraph, HttpGet & All Loaders")
 print("📋 Auto-Copy to Clipboard: ACTIVE (Ctrl+V immediately after execution)")
+print("💾 Workspace Backup: workspace/Latest_Captured_Script.luau")
 print("==================================================================")
 
 local real_loadstring   = loadstring or (G and G.loadstring)
@@ -43,7 +53,8 @@ local real_load         = load or (G and G.load)
 local real_writefile    = writefile or (G and G.writefile)
 local real_makefolder   = makefolder or (G and G.makefolder)
 local real_isfolder     = isfolder or (G and G.isfolder)
-local real_setclipboard = setclipboard or toclipboard or (G and G.setclipboard) or (Clipboard and Clipboard.set)
+local real_setclipboard = setclipboard or toclipboard or (G and G.setclipboard) or (Clipboard and Clipboard.set) or writeclipboard
+local real_hookfunc     = hookfunction or replaceclosure or (G and G.hookfunction)
 
 -- Ensure workspace directory structure
 pcall(function()
@@ -53,7 +64,7 @@ pcall(function()
 end)
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 1. STEALTH ANTI-TAMPER SHIELD (PREVENT LOADER CRASHES & CHECKS)
+-- 1. STEALTH ANTI-TAMPER & ENVIRONMENT SPOOFING (PREVENTS LOADER DETECTION)
 -- ─────────────────────────────────────────────────────────────────────────────
 local falseFunc = function() return false end
 local trueFunc  = function() return true end
@@ -69,7 +80,7 @@ pcall(function() if _G then _G.isnewcclosure = trueFunc end end)
 pcall(function() G.checkcaller = trueFunc end)
 pcall(function() getfenv().checkcaller = trueFunc end)
 
--- Protect WebSocket native C closure (Prevents Polsec disconnect / retry loops)
+-- Protect WebSocket native C closure (Prevents Polsec / Fulcrum disconnect loops)
 pcall(function()
     if WebSocket and WebSocket.Connect then
         WebSocket.connect = WebSocket.Connect
@@ -78,7 +89,7 @@ pcall(function()
 end)
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 2. DUMPING ENGINE & CLIPBOARD PIPELINE
+-- 2. DUMPING ENGINE & INSTANT CLIPBOARD PIPELINE
 -- ─────────────────────────────────────────────────────────────────────────────
 local capturedHashes = {}
 local dumpCount = 0
@@ -93,18 +104,27 @@ local function fastHash(s)
     return string.format("%d_%08x", len, h)
 end
 
-local function harvestScript(src, origin, extraInfo)
-    if not src or type(src) ~= "string" or #src < 120 then return end
+local function isPlausibleScript(src)
+    if not src or type(src) ~= "string" or #src < 100 then return false end
     
-    -- Exclude internal dumper script signature
     if src:find("PAYOMBOYZ_DUMPER_LOADED") or src:find("Universal AutoExecute Script Dumper") then
-        return
+        return false
     end
 
-    -- Exclude Polsec enclib codec from being treated as the final game script
     if src:find("Zstd decoder adapted from") or src:find("101arrowz/fzstd") then
-        return
+        return false
     end
+
+    local low = src:sub(1, 200):lower()
+    if low:find("<!doctype html") or low:find("<html") or low:find("<head>") then
+        return false
+    end
+
+    return true
+end
+
+local function harvestScript(src, origin, extraInfo)
+    if not isPlausibleScript(src) then return end
 
     local h = fastHash(src)
     if capturedHashes[h] then return end
@@ -115,7 +135,7 @@ local function harvestScript(src, origin, extraInfo)
     local sizeBytes = #src
 
     print("==================================================================")
-    print(string.format("🎉 [PAYOMBØYZ] CAPTURED GENUINE SCRIPT PAYLOAD #%d!", dumpCount))
+    print(string.format("🎉 [PAYOMBØYZ] CAPTURED SCRIPT PAYLOAD #%d!", dumpCount))
     print(string.format("   Origin: %s %s", tostring(origin), extraInfo and ("(" .. tostring(extraInfo) .. ")") or ""))
     print(string.format("   Size: %d bytes | Lines: %d", sizeBytes, lineCount))
     print("   📋 STATUS: COPIED DIRECTLY TO WINDOWS CLIPBOARD (Ctrl+V)!")
@@ -143,14 +163,82 @@ local function harvestScript(src, origin, extraInfo)
     pcall(function()
         game:GetService("StarterGui"):SetCore("SendNotification", {
             Title = "🎉 SCRIPT CAPTURED (COPIED)!",
-            Text = string.format("ดึงโค้ดสำเร็จ (%d ไบต์) กด Ctrl+V ได้เลย!", sizeBytes),
-            Duration = 8
+            Text = string.format("ดึงโค้ด %s สำเร็จ (%d bytes) กด Ctrl+V ได้เลย!", tostring(origin), sizeBytes),
+            Duration = 6
         })
     end)
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 3. MULTI-STAGE POLSEC CODEC SNOOPER (ZSTD / CHACHA20)
+-- 3. UNIVERSAL NETWORK SINK HOOKS (JNKIE, SCRIPTBLOX, LUARMOR CDN, GITHUB)
+-- ─────────────────────────────────────────────────────────────────────────────
+pcall(function()
+    if not real_hookfunc then return end
+
+    if game and game.HttpGet then
+        local old_httpget
+        old_httpget = real_hookfunc(game.HttpGet, function(self, url, ...)
+            local res = old_httpget(self, url, ...)
+            if type(res) == "string" and #res > 100 then
+                local u_str = tostring(url or "HttpGet")
+                if not u_str:find("discord") and not u_str:find("roblox.com/v1") then
+                    task.spawn(function()
+                        harvestScript(res, "HttpGet", u_str)
+                    end)
+                end
+            end
+            return res
+        end)
+    end
+
+    if game and game.HttpGetAsync then
+        local old_httpgetasync
+        old_httpgetasync = real_hookfunc(game.HttpGetAsync, function(self, url, ...)
+            local res = old_httpgetasync(self, url, ...)
+            if type(res) == "string" and #res > 100 then
+                local u_str = tostring(url or "HttpGetAsync")
+                if not u_str:find("discord") and not u_str:find("roblox.com/v1") then
+                    task.spawn(function()
+                        harvestScript(res, "HttpGetAsync", u_str)
+                    end)
+                end
+            end
+            return res
+        end)
+    end
+
+    local req_targets = {
+        request,
+        (syn and syn.request),
+        http_request,
+        (fluxus and fluxus.request),
+        (krnl and krnl.request),
+        (http and http.request)
+    }
+
+    for _, req_fn in ipairs(req_targets) do
+        if type(req_fn) == "function" then
+            pcall(function()
+                local old_req
+                old_req = real_hookfunc(req_fn, function(options, ...)
+                    local resp = old_req(options, ...)
+                    if type(resp) == "table" and type(resp.Body) == "string" and #resp.Body > 100 then
+                        local target_url = (type(options) == "table" and options.Url) or "request"
+                        if not tostring(target_url):find("discord") then
+                            task.spawn(function()
+                                harvestScript(resp.Body, "request()", target_url)
+                            end)
+                        end
+                    end
+                    return resp
+                end)
+            end)
+        end
+    end
+end)
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 4. MULTI-STAGE POLSEC & FULCRUM CODEC SNOOPER (DECODECACHE / WEBSOCKET)
 -- ─────────────────────────────────────────────────────────────────────────────
 local function wrapEnclibModule(codecModule)
     if type(codecModule) ~= "table" or not codecModule.new then
@@ -193,7 +281,7 @@ local function wrapEnclibModule(codecModule)
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 4. UNIVERSAL LOADSTRING / LOAD SINK INTERCEPTOR
+-- 5. UNIVERSAL LOADSTRING / LOAD / LOADFILE SINK INTERCEPTOR
 -- ─────────────────────────────────────────────────────────────────────────────
 local function universalTrap(codeStr, chunkName)
     local src = tostring(codeStr or "")
@@ -214,9 +302,19 @@ local function universalTrap(codeStr, chunkName)
         end
     end
 
-    -- [STAGE 2] Genuine Script Payload Interception
-    if #src >= 120 then
-        harvestScript(src, "loadstring", chunk)
+    -- [STAGE 2] Universal Luarmor / Jnkie / Luraph / Raw Script Interception
+    if #src >= 100 then
+        local originTag = "loadstring"
+        if src:find("LPH-") or src:find("LPH_") or src:find("Luraph") then
+            originTag = "Luraph VM"
+        elseif src:find("Luarmor") or src:find("v4_init") or src:find("v5_init") then
+            originTag = "Luarmor"
+        elseif src:find("MoonSec") then
+            originTag = "MoonSec VM"
+        elseif src:find("jnkie") then
+            originTag = "Jnkie"
+        end
+        harvestScript(src, originTag, chunk)
     end
 
     if real_loadstring then
@@ -241,12 +339,12 @@ pcall(function() getfenv().load = finalHook end)
 pcall(function() if _G then _G.load = finalHook end end)
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 5. SETMETATABLE HOOK (Unpacked Module Tables e.g. Luarmor V4 / Luraph VM)
+-- 6. SETMETATABLE HOOK (Luarmor V4 / Luraph VM Unpacked Module Tables)
 -- ─────────────────────────────────────────────────────────────────────────────
-local old_setmetatable = hookfunction and (getgenv and getgenv().setmetatable or setmetatable)
-if old_setmetatable and hookfunction then
+local old_setmetatable = real_hookfunc and (getgenv and getgenv().setmetatable or setmetatable)
+if old_setmetatable and real_hookfunc then
     pcall(function()
-        hookfunction(setmetatable, function(tbl, meta)
+        real_hookfunc(setmetatable, function(tbl, meta)
             if type(tbl) == "table" and not tbl.__payomboyz_dumped then
                 local fn_count = 0
                 for k, v in pairs(tbl) do
@@ -288,7 +386,7 @@ if old_setmetatable and hookfunction then
                     end
                     table.insert(dump_lines, "}")
                     local moduleContent = table.concat(dump_lines, "\\n")
-                    harvestScript(moduleContent, "setmetatable.module", string.format("%d_funcs", fn_count))
+                    harvestScript(moduleContent, "setmetatable (Module Table)", string.format("%d_funcs", fn_count))
                 end
             end
             return old_setmetatable(tbl, meta)
@@ -296,21 +394,7 @@ if old_setmetatable and hookfunction then
     end)
 end
 
--- ─────────────────────────────────────────────────────────────────────────────
--- 6. HTTPGET HOOK (Logs Raw CDN Payload URLs)
--- ─────────────────────────────────────────────────────────────────────────────
-pcall(function()
-    if hookfunction and game and game.HttpGet then
-        local old_httpget = hookfunction(game.HttpGet, function(self, url, ...)
-            if type(url) == "string" and not string.find(url, "discord") then
-                print("[PAYOMBOYZ HTTPGET] Target URL: " .. url)
-            end
-            return old_httpget(self, url, ...)
-        end)
-    end
-end)
-
-print("🛡️ [PAYOMBØYZ] AutoExecute Dumper is ARMED. Run any script to capture!")
+print("🛡️ [PAYOMBØYZ] AutoExecute Dumper is ARMED. Run ANY script to capture!")
 """
 
 
@@ -323,21 +407,20 @@ def get_runtime_interceptor_file() -> discord.File:
 def build_unbreakable_guide_embed() -> discord.Embed:
     """Builds the comprehensive ephemeral instruction guide for when scripts cannot be statically deobfuscated."""
     embed = discord.Embed(
-        title="🛠️ PAYOMBØYZ Universal AutoExecute Script Dumper (ดึงโค้ดแท้ 100%)",
+        title="🛠️ PAYOMBØYZ Universal AutoExecute Script Dumper (ดักจับทุกสคริปต์ 100%)",
         description=(
-            "**ทำไมสคริปต์บางตัวถึงแกะแบบ Static ธรรมดาไม่ออก?**\n"
-            "สคริปต์ระดับสูง (เช่น **PolSec V2 Streaming Socket, Fulcrum, Luarmor V4, Luraph VM, MoonSec VM**) "
-            "จะสตรีมโค้ดผ่าน WebSocket หรือซ่อนตัวแปรไว้ในแรม ซึ่งตัวโค้ดที่แท้จริงจะ **คลายตัวเฉพาะตอนที่รันอยู่ในเกม Roblox เท่านั้น!**\n\n"
+            "**ตัวดักจับระดับสากล (Universal Anti-Obfuscation & In-Game RAM Sniffer)**\n"
+            "รองรับการดักจับสคริปต์ทุกชนิด: **Luarmor V4/V5, Jnkie, ScriptBlox, Polsec V2 Streaming, Luraph VM, MoonSec VM, HttpGet, request()**\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "👉 **วิธีดึง Source Code แท้กลับมาง่ายๆ (Auto-Copy ลง Clipboard):**\n\n"
+            "👉 **วิธีใช้งานเพื่อดึง Source Code แท้ (Auto-Copy ลง Clipboard):**\n\n"
             "**1️⃣ ดาวน์โหลดไฟล์ Dumper**\n"
             "• ดาวน์โหลดไฟล์ **`PAYOMBOYZ_AutoExecute_Dumper.luau`** ที่แนบมานี้\n\n"
             "**2️⃣ นำไปใส่ในโฟลเดอร์ AutoExecute หรือรันก่อนเปิดสคริปต์**\n"
-            "• **วิธีที่ 1 (แนะนำสุด):** นำไฟล์นี้ไปวางในโฟลเดอร์ `autoexec` ของโปรแกรมรัน (เช่น Delta, Wave, Real, Solara, Synapse Z)\n"
+            "• **วิธีที่ 1 (แนะนำที่สุด):** นำไฟล์นี้ไปวางในโฟลเดอร์ `autoexec` ของโปรแกรมรัน (เช่น Real, Delta, Wave, Solara, Synapse Z, Xeno)\n"
             "• **วิธีที่ 2:** เข้าเกม Roblox แล้วรันไฟล์ `PAYOMBOYZ_AutoExecute_Dumper.luau` นี้ก่อน 1 ครั้ง\n"
-            "• เมื่อระบบพร้อม จะมีข้อความเตือนในเกมว่า *'Universal AutoExecute Script Dumper Initialized'* 🟢\n\n"
+            "• เมื่อระบบพร้อม จะมีข้อความเตือนในเกมว่า *'UNIVERSAL ZERO-DAY AUTOEXEC SCRIPT DUMPER INITIALIZED'* 🟢\n\n"
             "**3️⃣ รันสคริปต์เป้าหมาย & รับโค้ดทันที**\n"
-            "• รันสคริปต์ที่คุณต้องการแกะตามปกติ\n"
+            "• รันสคริปต์ Luarmor, Jnkie, หรือตัวใดก็ตามที่คุณต้องการแกะ\n"
             "• **โค้ดที่แท้จริงจะถูก Copy ลง Windows Clipboard อัตโนมัติทันที!** (กด `Ctrl + V` เพื่อวางโค้ดได้เลย)\n"
             "• พร้อมทั้งบันทึกไฟล์สำรองไว้ที่ `workspace/Latest_Captured_Script.luau` ในเครื่องของคุณ\n"
             "• นำโค้ดที่ได้มาส่งกลับเข้าบอทเพื่อทำการ Refactor & Clean AST ได้ทันที!\n"
@@ -345,5 +428,5 @@ def build_unbreakable_guide_embed() -> discord.Embed:
         ),
         color=discord.Color.from_rgb(0, 230, 150)
     )
-    embed.set_footer(text="PAYOMBØYZ ZERO-DAY FORENSICS • Auto-Copy to Clipboard • 100% Precision")
+    embed.set_footer(text="PAYOMBØYZ ZERO-DAY FORENSICS • Luarmor • Jnkie • Polsec • Luraph • 100% Precision")
     return embed
