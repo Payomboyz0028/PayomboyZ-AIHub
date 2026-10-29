@@ -769,7 +769,45 @@ class HybridAIRouter:
         read_timeout = 240.0 if long_request else (120.0 if worker.provider in ("bluezygpt", "openrouter", "deepseek") else 45.0)
         timeout_val = timeout or (5.0, read_timeout)
 
-        max_attempts = 3 if worker.provider == "bluezygpt" else 1
+        # Fast failover & Cloudflare bypass for BluezyGPT
+        if worker.provider == "bluezygpt":
+            try:
+                from curl_cffi import requests as cffi_requests
+                cffi_timeout = min(timeout_val[1], 12.0) if isinstance(timeout_val, tuple) else 12.0
+                resp = cffi_requests.post(
+                    url,
+                    headers=headers,
+                    json=payload,
+                    impersonate="chrome120",
+                    timeout=cffi_timeout
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    choices = data.get("choices", [])
+                    if choices and "message" in choices[0]:
+                        content = choices[0]["message"].get("content", "")
+                        if content and content.strip():
+                            if "</think>" in content:
+                                content = content.split("</think>", 1)[1].strip()
+                            else:
+                                content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+                            return content.strip()
+                    print(f"[HYBRID ROUTER] {worker.name} returned empty content, swapping to fallback")
+                    self.mark_cooldown(worker, duration=30.0, reason="Empty response")
+                    return None
+                elif resp.status_code in (500, 502, 503, 504, 520, 521, 522, 524):
+                    print(f"[HYBRID ROUTER] {worker.name} upstream busy (HTTP {resp.status_code}). Swapping to fallback...")
+                    self.mark_cooldown(worker, duration=45.0, reason=f"HTTP {resp.status_code} Upstream Busy")
+                    return None
+                else:
+                    self.mark_cooldown(worker, duration=30.0, reason=f"HTTP {resp.status_code}: {resp.text[:60]}")
+                    return None
+            except Exception as cffi_err:
+                print(f"[HYBRID ROUTER] {worker.name} timeout/unresponsive ({cffi_err}). Instantly swapping to fallback...")
+                self.mark_cooldown(worker, duration=45.0, reason="Bluezy Timeout")
+                return None
+
+        max_attempts = 1
 
         for attempt in range(1, max_attempts + 1):
             try:

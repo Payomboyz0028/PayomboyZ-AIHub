@@ -2708,6 +2708,67 @@ async def _handle_ai_message(message: discord.Message):
 
     # Dedicated drop channel gate: files and scripts only, NEVER conversational AI!
     if dedicated_mode:
+        if dedicated_mode in ("clone", "web_clone"):
+            # Check if user sent a URL or requested cloning
+            web_url_match = re.search(r'https?://[^\s<>"]+|www\.[^\s<>"]+', message.content)
+            if web_url_match:
+                target_web_url = web_url_match.group(0)
+                if not target_web_url.startswith("http"):
+                    target_web_url = "https://" + target_web_url
+                async with message.channel.typing():
+                    ack_msg = await message.reply(
+                        f"🌐 **ตรวจพบเป้าหมาย:** `{target_web_url}`\n"
+                        f"🤖 **กำลังระดมพล AI ทั้ง 20 ตัวเข้าทำการโคลนและแกะระบบแบบเจาะลึก...**\n"
+                        f"• Agent 1–3: Recon & WAF Penetrator + Headless Chrome Pre-renderer\n"
+                        f"• Agent 4–6: UX/UI Forensics + JS Decompiler + Source Map TS/JSX Recovery\n"
+                        f"• Agent 7–10: Secret/Env Exfiltration + Endpoint Hunter + OpenAPI 3.0 Contract\n"
+                        f"• Agent 11–14: Multi-Stack Synthesis (Spring Boot, Express, FastAPI, Mock API)\n"
+                        f"• Agent 15–17: Database Schema + Auth Flowchart + Interactive Form Engine\n"
+                        f"• Agent 18–20: Turnkey Instant Deployer + Discord Bot + Mermaid Architecture\n"
+                        f"⏳ กรุณารอสักครู่ ระบบกำลังประมวลผล...",
+                        mention_author=True
+                    )
+                    from bot.web_clone_engine import clone_site
+                    res = await asyncio.to_thread(clone_site, target_web_url, "Godmode")
+                    
+                    if res.get("success"):
+                        zip_path = Path(res["zip_path"])
+                        files = [discord.File(str(zip_path), filename=zip_path.name)] if zip_path.exists() and zip_path.stat().st_size <= 24*1024*1024 else []
+                        fleet_stat = res.get("ai_fleet", {})
+                        
+                        embed = discord.Embed(
+                            title=f"⚡ PAYOMBØYZ 20-AI FLEET | โคลนเว็บไซต์สำเร็จ: {res.get('domain')}",
+                            description=(
+                                f"**เป้าหมาย:** `{target_web_url}`\n"
+                                f"**โหมด:** `⚡ ปีศาจกลืนกินโลก (Godmode + 20 AI Fleet)`\n"
+                                f"**SPA Pre-rendered:** `{'✅ สำเร็จ' if res.get('is_spa_hydrated') else '⚡ Fast TLS'}`\n"
+                                f"**ไฟล์ Assets ดูดและ Localize:** `{res.get('downloaded_files', 0):,} ไฟล์`\n"
+                                f"**Source Code กู้คืน (TS/JSX):** `{res.get('harvested_source_files', 0):,} ไฟล์`\n"
+                                f"**API Endpoints ที่สกัดได้:** `{len(res.get('apis_found', [])):,} รายการ`\n"
+                                f"**Backend Synthesized:** `{res.get('tech_stack', {}).get('backend_framework', 'Multi-Stack')}`\n"
+                                f"**🤖 20-AI Fleet Execution:** `{fleet_stat.get('agents_completed', 20)}/20 Agents Completed` (`{fleet_stat.get('fleet_elapsed', res.get('elapsed', 0)):.1f}s`)\n\n"
+                                f"📦 **ผลงานของ 20 AI Agents ที่บรรจุใน ZIP:**\n"
+                                f"• `openapi_generated.yaml` (Agent 10)\n"
+                                f"• `SpringBoot_Backend_Generated.java` (Agent 11)\n"
+                                f"• `Express_Backend_Generated.ts` (Agent 12)\n"
+                                f"• `FastAPI_Backend_Generated.py` (Agent 13)\n"
+                                f"• `mock_interceptor_generated.js` (Agent 14)\n"
+                                f"• `schema_generated.sql` (Agent 15)\n"
+                                f"• `discord_bot_generated/` (Agent 19)\n"
+                                f"• `FLEET_ARCHITECTURE.md` (Agent 20)\n"
+                                f"• `server.py` & `start.bat` (Agent 18) — ดับเบิ้ลคลิกรัน Localhost ได้ทันที!"
+                            ),
+                            color=discord.Color.from_rgb(0, 230, 150)
+                        )
+                        embed.set_footer(text="PAYOMBØYZ 20-AI Cloner Fleet • Zero Quota Conflict • Turnkey Deliverable")
+                        await ack_msg.edit(content=None, embed=embed, attachments=files)
+                        from bot.deobf_panel import post_pinned_guide
+                        await post_pinned_guide(message.channel, mode="clone")
+                        return
+                    else:
+                        await ack_msg.edit(content=f"❌ เกิดข้อผิดพลาดในการโคลนเว็บ: `{res.get('error', 'Unknown error')}`")
+                        return
+
         from bot.loader_spy_engine import LoaderSpyEngine
         _u = LoaderSpyEngine.extract_loader_urls(message.content)
         from bot.deobf_panel import ACTIVE_MULTIGAME_HUBS

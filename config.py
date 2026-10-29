@@ -44,7 +44,7 @@ if raw_keys:
 else:
     GEMINI_API_KEYS = [GEMINI_API_KEY] if GEMINI_API_KEY else []
 
-for i in range(2, 20):
+for i in range(2, 40):
     k = os.environ.get(f"GEMINI_API_KEY_{i}")
     if k and k.strip() and k.strip() not in GEMINI_API_KEYS:
         GEMINI_API_KEYS.append(k.strip())
@@ -60,7 +60,7 @@ raw_official_keys = os.environ.get("DEEPSEEK_OFFICIAL_KEYS", "")
 if raw_official_keys:
     DEEPSEEK_OFFICIAL_KEYS = [k.strip() for k in raw_official_keys.split(",") if k.strip()]
 
-for i in range(1, 25):
+for i in range(1, 40):
     k = os.environ.get(f"DEEPSEEK_API_KEY_{i}")
     if k and k.strip() and not k.startswith("sk-or-v1-") and k.strip() not in DEEPSEEK_OFFICIAL_KEYS:
         DEEPSEEK_OFFICIAL_KEYS.append(k.strip())
@@ -73,7 +73,7 @@ raw_or_keys = os.environ.get("OPENROUTER_API_KEYS", "")
 if raw_or_keys:
     OPENROUTER_API_KEYS = [k.strip() for k in raw_or_keys.split(",") if k.strip()]
 
-for i in range(1, 25):
+for i in range(1, 40):
     k = os.environ.get(f"OPENROUTER_API_KEY_{i}")
     if k and k.strip() and k.strip() not in OPENROUTER_API_KEYS:
         OPENROUTER_API_KEYS.append(k.strip())
@@ -94,7 +94,10 @@ if raw_ds_keys:
 BLUEZY_BASE_URL = os.environ.get("BLUEZY_BASE_URL", "https://bluezygpt.space/api/v1")
 BLUEZY_MODEL = "bluezygpt-free"
 BLUEZY_API_KEYS = []
-for _i in range(1, 25):
+raw_bz = os.environ.get("BLUEZY_API_KEYS", "")
+if raw_bz:
+    BLUEZY_API_KEYS = [k.strip() for k in raw_bz.split(",") if k.strip()]
+for _i in range(1, 40):
     _k = os.environ.get(f"BLUEZY_API_KEY_{_i}")
     if _k and _k.strip() and _k.strip() not in BLUEZY_API_KEYS:
         BLUEZY_API_KEYS.append(_k.strip())

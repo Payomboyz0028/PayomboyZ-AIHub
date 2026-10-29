@@ -2302,6 +2302,26 @@ async def setup(bot):
         report_lines.append("\n================================================================================")
         recon_report_path.write_text("\n".join(report_lines), encoding="utf-8")
 
+        # Step 15.5: 20-AI Autonomous Fleet Deep Reconstruction (Isolated API Pool)
+        fleet_report = {}
+        try:
+            from bot.cloner_ai_fleet import ClonerAIFleet
+            endpoints_summary = "\n".join([f"{c.method} {c.path} -> {c.summary}" for c in api_contracts]) or "REST/CRUD API endpoints"
+            fleet_report = ClonerAIFleet.execute_fleet_pipeline(
+                target_url=target_url,
+                site_name=safe_domain,
+                raw_html=rendered_html,
+                headers=dict(resp_headers),
+                js_snippets=self.js_snippets,
+                discovered_assets=[a for _, a in assets_to_download],
+                found_secrets={"secrets": self.discovered_secrets, "exfiltrated": self.exfiltrated_files},
+                endpoints_summary=endpoints_summary,
+                output_dir=session_folder
+            )
+            print(f"[+] 20-AI Autonomous Fleet finished {fleet_report.get('agents_completed', 20)}/20 tasks in {fleet_report.get('fleet_elapsed', 0)}s", flush=True)
+        except Exception as fleet_err:
+            print(f"[!] Cloner AI Fleet warning: {fleet_err}", flush=True)
+
         # Step 16: Bundle into Complete Offline Distribution ZIP Package
         zip_path = CLONE_OUTPUT_DIR / f"{safe_domain}_cloned_{timestamp}.zip"
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -2342,6 +2362,7 @@ async def setup(bot):
             "security_findings": self.security_findings,
             "subdomains_alive": self.subdomains_alive,
             "admin_paths": self.admin_paths_found,
+            "ai_fleet": fleet_report,
             "session_folder": str(session_folder),
             "report_path": str(recon_report_path),
             "architecture_path": str(session_folder / "ARCHITECTURE.md"),

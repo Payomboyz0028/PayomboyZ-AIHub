@@ -89,6 +89,12 @@ def build_compact_guide_embed(mode: str = "deobfuscate") -> discord.Embed:
             description="อัปโหลดไฟล์สคริปต์ (.lua / .luau / .txt) ➔ ป้องกันสคริปต์ด้วย Clyde VM + CFF ทันที (Public)",
             color=color
         )
+    elif mode in ("clone", "web_clone"):
+        embed = discord.Embed(
+            title="🌐 Web Cloner — 20-AI Autonomous Fleet",
+            description="วางลิงก์ URL เว็บไซต์ หรือกดปุ่มด้านล่าง ➔ ดูดเว็บทั้งระบบ Pre-render SPA + กู้ซอร์สโค้ดแท้ TS/JSX + สร้าง Backend & Flowchart ด้วย AI ทั้ง 20 ตัว ทันที (Public)",
+            color=discord.Color.from_rgb(0, 168, 255)
+        )
     else:
         embed = discord.Embed(
             title="🎮 Script Deobfuscator — Universal Engine",
@@ -113,7 +119,14 @@ async def post_pinned_guide(channel: discord.abc.Messageable, mode: str = "deobf
                 pass
 
         embed = build_compact_guide_embed(mode)
-        view = DeobfResultActionView() if mode not in ("obfuscate", "obf") else None
+        if mode in ("clone", "web_clone"):
+            from bot.clone_panel import ClonePanelView
+            view = ClonePanelView()
+        elif mode not in ("obfuscate", "obf"):
+            view = DeobfResultActionView()
+        else:
+            view = None
+
         new_msg = await channel.send(embed=embed, view=view)
         if ch_key in data:
             data[ch_key]["last_guide_id"] = new_msg.id
