@@ -469,8 +469,8 @@ DEFAULT_PANEL_DESCRIPTION = (
 
     "• 📦 Base64 / A7DEV\n\n"
 
-    "**🔒 เอนจินป้องกันโค้ด (Sentinel Engine v4.0)**\n"
-    "• 🔴 Level 3: Maximum Armor (Sentinel Engine v4.0 / CFF ลึก + JIT Metatable Decryptor)\n"
+    "**🔒 เอนจินป้องกันโค้ด (Sentinel Engine v4.1)**\n"
+    "• 🔴 Level 3: Maximum Armor (Sentinel Engine v4.1 / Dynamic Key + JIT Decrypt)\n"
     "• 🟡 Level 2: Balanced Security (Coupled CFF State Machine + Register VM)\n"
     "• 🟢 Level 1: Fast CFF (60FPS Native Luau Execution)\n\n"
 
@@ -1145,7 +1145,7 @@ class DeobfuscateModal(discord.ui.Modal, title="PAYOMBOYZ Deobfuscator V10.0"):
 
 
 
-class ObfuscateModal(discord.ui.Modal, title="PAYOMBOYZ Sentinel Engine v4.0"):
+class ObfuscateModal(discord.ui.Modal, title="PAYOMBOYZ Sentinel Engine v4.1"):
     filename_input = discord.ui.TextInput(
         label="ชื่อไฟล์ Output (ไม่บังคับ)",
         placeholder="Protected.lua",
@@ -1274,7 +1274,7 @@ class FileConfigModal(discord.ui.Modal):
         raw_bytes: Optional[bytes] = None,
         engine_choice: Optional[str] = None
     ):
-        modal_title = "PAYOMBOYZ Deobfuscator V10.0" if mode == "deobf" else "PAYOMBOYZ Sentinel Engine v4.0"
+        modal_title = "PAYOMBOYZ Deobfuscator V10.0" if mode == "deobf" else "PAYOMBOYZ Sentinel Engine v4.1"
         super().__init__(title=modal_title)
         self.mode = mode
         self.attachment = attachment
@@ -2222,7 +2222,7 @@ class PanelDirectModalView(discord.ui.View):
             placeholder = "⚙️ เลือก Deobfuscator Engine..."
         else:
             options = [
-                discord.SelectOption(label="🔴 Level 3: Maximum Armor (แนะนำ)", value="level3", description="Sentinel Engine v4.0 (JIT Proxy + Coupled CFF)", default=True),
+                discord.SelectOption(label="🔴 Level 3: Maximum Armor (แนะนำ)", value="level3", description="Sentinel Engine v4.1 (Dynamic Key + JIT Decrypt)", default=True),
                 discord.SelectOption(label="🟡 Level 2: Balanced Security", value="level2", description="Register VM + S-Box Keystream Fallback"),
                 discord.SelectOption(label="🟢 Level 1: Fast CFF", value="level1", description="Fast Register VM (60 FPS Native Luau)"),
             ]
