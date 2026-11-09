@@ -598,8 +598,8 @@ def build_obfuscate_embed(res: dict, input_name: str) -> tuple[discord.Embed, li
     verified = res.get("verified", True)
 
     embed = discord.Embed(
-        title="⚡ PAYOMBØYZ Obfuscate V6.7.6.7 | ✅ เข้ารหัสและป้องกันสำเร็จ",
-        description=f"สคริปต์ `{safe_input_name}` ได้รับการป้องกันผ่านสถาปัตยกรรม **PAYOMBØYZ Real CFF + Invariant Machine** เรียบร้อยแล้ว รองรับ Executor และภาษาไทย 100%",
+        title="⚡ PAYOMBOYZ Security (Sentinel Engine v4.0) | ✅ เข้ารหัสและป้องกันสำเร็จ",
+        description=f"สคริปต์ `{safe_input_name}` ได้รับการป้องกันผ่านสถาปัตยกรรม **PAYOMBOYZ Security (Sentinel Engine v4.0)** เรียบร้อยแล้ว รองรับ Executor และภาษาไทย 100%",
         color=discord.Color.purple()
     )
 
@@ -619,11 +619,11 @@ def build_obfuscate_embed(res: dict, input_name: str) -> tuple[discord.Embed, li
     embed.add_field(name="📊 ข้อมูลและสถิติขนาดไฟล์", value=stats_val, inline=False)
 
     security_features = (
-        "• **Multi-Layer Virtual Machine:** แปลงชุดคำสั่งเป็น Custom Bytecode รันบน VM Dispatcher\n"
+        "• **Register Virtual Machine (VM):** แปลงชุดคำสั่งเป็น Custom Bytecode รันบน Sentinel VM\n"
         "• **Control Flow Flattening (CFF):** สับเปลี่ยน State Machine ป้องกัน Decompiler ตรวจจับโฟลว์\n"
-        "• **Dynamic String & Constant Encryption:** เข้ารหัสแบบ JIT ไร้ Plaintext String ในโค้ด\n"
-        "• **Anti-Tamper & Environment Protection:** ป้องกันการ Hook และ Dump หน่วยความจำ\n"
-        "• **Autonomous AI Synergy:** ขับเคลื่อนความซับซ้อนโดย DeepSeek V3 AI Engine"
+        "• **JIT On-Demand Decryption:** สตริงและค่าคงที่ถูกถอดรหัสทีละตัวเมื่อถูกเรียกใช้งาน ป้องกัน Batch Dump\n"
+        "• **Multi-Invariant Dynamic Seed:** ค่าตัวแปรตรวจความปลอดภัยส่งผลต่อ Salt ของทั้งระบบ\n"
+        "• **Anti-Tamper & Metatable Guard:** ตรวจสอบ Metatable Invariants และดักจับ C-closure Spoof"
     )
     embed.add_field(name="🔒 รายละเอียดชั้นความปลอดภัย (Security Layers)", value=security_features, inline=False)
 
@@ -632,7 +632,7 @@ def build_obfuscate_embed(res: dict, input_name: str) -> tuple[discord.Embed, li
     if script_summary:
         embed.add_field(name="📝 สรุปการทำงานของสคริปต์ (Script Overview)", value=script_summary, inline=False)
 
-    embed.set_footer(text="PAYOMBØYZ Obfuscate V6.7.6.7 | Powered by DeepSeek & Prometheus VM")
+    embed.set_footer(text="PAYOMBOYZ Security (Sentinel Engine v4.0) • payomboyzcreative.online")
 
     output_path = res.get("output_path")
     obf_code = res.get("obfuscated_code", "")
@@ -2088,7 +2088,7 @@ async def cmd_slash_obfuscate(
     except Exception as e:
         safe_err = security.sanitize_output_text(str(e), config.DISCORD_AI_BOT_TOKEN)
         embed = discord.Embed(
-            title="⚡ PAYOMBØYZ Obfuscate V6.7.6.7 | ❌ เกิดข้อผิดพลาด",
+            title="⚡ PAYOMBOYZ Security (Sentinel Engine v4.0) | ❌ เกิดข้อผิดพลาด",
             description=f"เกิดข้อผิดพลาดระหว่างประมวลผล:\n```\n{safe_err[:500]}\n```",
             color=discord.Color.red()
         )
@@ -2200,9 +2200,9 @@ async def cmd_slash_help(interaction: discord.Interaction):
         inline=False
     )
     embed.add_field(
-        name="🔒 คำสั่ง Obfuscator (V6.7.6.7)",
-        value="• `/obfuscate [file/code] [engine]` : เข้ารหัสและป้องกันสคริปต์ด้วย Multi-Layer VM\n"
-              "• เอนจินที่รองรับ: Recommended (AI Polymorphic + Double-VM), Double-VM, Fast-VM, DeepSeek AI, Minifier",
+        name="🔒 คำสั่ง Obfuscator (Sentinel Engine v4.0)",
+        value="• `/obfuscate [file/code] [engine]` : เข้ารหัสและป้องกันสคริปต์ด้วย Sentinel Engine v4.0 (payomboyzcreative.online)\n"
+              "• เอนจินที่รองรับ: Level 3: Maximum Armor (Sentinel Engine v4.0), Level 2: Balanced Security, Level 1: Fast CFF",
         inline=False
     )
     embed.add_field(

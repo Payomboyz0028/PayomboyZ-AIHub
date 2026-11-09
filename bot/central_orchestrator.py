@@ -224,52 +224,97 @@ class CentralOrchestrator:
 
 
     @classmethod
-
     @managed_job()
     async def process_script_obfuscation(
-
         cls,
-
         filepath: str,
-
         filename: str,
-
         engine_choice: str = "recommended",
-
     ) -> Dict[str, Any]:
-
         source_code = ""
-
         try:
-
             with open(filepath, "r", encoding="utf-8", errors="replace") as handle:
-
                 source_code = handle.read()
-
         except Exception:
-
             source_code = ""
 
+        # Map engine choice to PayomboyZ Sentinel Engine levels
+        choice_lower = (engine_choice or "level3").lower()
+        if choice_lower in ("level1", "1", "fast", "fast_vm", "minify"):
+            level_param = "level1"
+        elif choice_lower in ("level2", "2", "balanced"):
+            level_param = "level2"
+        else:
+            level_param = "level3"
 
+        start_time = time.time()
+        # Primary: Call Central Cloud API (payomboyzcreative.online)
+        api_url = os.getenv("PAYOMBOYZ_OBF_API_URL", "https://payomboyzcreative.online/api/v1/tools?tool=obfuscate")
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "PAYOMBOYZ-Discord-Bot/4.0",
+            "X-Bot-Origin": "payomboyz-discord-aihub",
+            "X-API-Key": "d23c5d8d0eeaeb08b49048c566f42daee80a924f50e882c2"
+        }
+        payload = {
+            "script": source_code,
+            "level": level_param,
+            "options": {
+                "antiDump": True,
+                "controlFlow": True,
+                "encryptStrings": True
+            }
+        }
+
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.post(api_url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=45)) as resp:
+                    res_data = await resp.json()
+                    elapsed = time.time() - start_time
+                    if resp.status == 200 and res_data.get("success"):
+                        obf_code = res_data.get("obfuscated") or res_data.get("obfuscatedScript") or ""
+                        ratio_val = res_data.get("ratio", "100%")
+                        if isinstance(ratio_val, str) and ratio_val.endswith("%"):
+                            try:
+                                ratio_num = float(ratio_val.replace("%", "")) / 100.0
+                            except Exception:
+                                ratio_num = round(len(obf_code) / max(1, len(source_code)), 2)
+                        else:
+                            ratio_num = float(ratio_val or 1.0)
+
+                        return {
+                            "success": True,
+                            "engine": res_data.get("engine", "🔴 Level 3: Maximum Armor (Sentinel Engine v4.0)"),
+                            "level": level_param,
+                            "original_size": res_data.get("originalSize", len(source_code)),
+                            "obfuscated_size": res_data.get("obfuscatedSize", len(obf_code)),
+                            "ratio": ratio_num,
+                            "elapsed": elapsed,
+                            "verified": res_data.get("verified", True),
+                            "obfuscated_code": obf_code,
+                            "features": res_data.get("features", [])
+                        }
+                    elif not res_data.get("success"):
+                        return {
+                            "success": False,
+                            "error": res_data.get("error", "Unknown obfuscation error"),
+                            "is_syntax_error": res_data.get("is_syntax_error", False),
+                            "elapsed": elapsed,
+                            "engine": res_data.get("engine", "Sentinel Engine v4.0 Pre-Flight")
+                        }
+        except Exception as api_err:
+            print(f"[CENTRAL ORCHESTRATOR] Cloud API failed ({api_err}), falling back to local engine...", flush=True)
 
         from bot.obfuscation_engine import OBFUSCATION_ENGINE
-
         loop = asyncio.get_running_loop()
-
         return await loop.run_in_executor(
-
             None,
-
             lambda: OBFUSCATION_ENGINE.obfuscate_code(
-
                 source_code,
-
                 engine_choice=engine_choice,
-
                 source_filename=filename,
-
             ),
-
         )
 
 

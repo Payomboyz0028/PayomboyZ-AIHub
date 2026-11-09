@@ -469,19 +469,10 @@ DEFAULT_PANEL_DESCRIPTION = (
 
     "• 📦 Base64 / A7DEV\n\n"
 
-    "**🔒 เอนจินป้องกันโค้ด (Obfuscator v6.7.6.7)**\n"
-
-    "• ⚡ Recommended: Multi-Layer Polymorphic VM(Double-VM + AI Mutation)\n"
-
-    "• 🔀 CFF Mode: Control Flow Flattening + Double-VM(ป้องกัน Decompiler สูงสุด)\n"
-
-    "• 🛡️ Double-VM: Two-Tier Instruction Virtualizer + Encrypted Constants\n"
-
-    "• ⚡ Fast-VM: High-Performance Anti-Tamper + Vmify\n"
-
-    "• 🤖 DeepSeek AI: Polymorphic Mutation & Semantic Virtualization\n"
-
-    "• 📦 Minifier: Mangled Identifier Shuffling\n\n"
+    "**🔒 เอนจินป้องกันโค้ด (Sentinel Engine v4.0)**\n"
+    "• 🔴 Level 3: Maximum Armor (Sentinel Engine v4.0 / CFF ลึก + JIT Metatable Decryptor)\n"
+    "• 🟡 Level 2: Balanced Security (Coupled CFF State Machine + Register VM)\n"
+    "• 🟢 Level 1: Fast CFF (60FPS Native Luau Execution)\n\n"
 
     "**💡 วิธีใช้งานผ่านแผงควบคุม(How to Use)**\n"
 
@@ -1154,7 +1145,7 @@ class DeobfuscateModal(discord.ui.Modal, title="PAYOMBOYZ Deobfuscator V10.0"):
 
 
 
-class ObfuscateModal(discord.ui.Modal, title="PAYOMBOYZ Obfuscator V6.7.6.7"):
+class ObfuscateModal(discord.ui.Modal, title="PAYOMBOYZ Sentinel Engine v4.0"):
     filename_input = discord.ui.TextInput(
         label="ชื่อไฟล์ Output (ไม่บังคับ)",
         placeholder="Protected.lua",
@@ -1283,7 +1274,7 @@ class FileConfigModal(discord.ui.Modal):
         raw_bytes: Optional[bytes] = None,
         engine_choice: Optional[str] = None
     ):
-        modal_title = "PAYOMBOYZ Deobfuscator V10.0" if mode == "deobf" else "PAYOMBOYZ Obfuscator V6.7.6.7"
+        modal_title = "PAYOMBOYZ Deobfuscator V10.0" if mode == "deobf" else "PAYOMBOYZ Sentinel Engine v4.0"
         super().__init__(title=modal_title)
         self.mode = mode
         self.attachment = attachment
@@ -2231,12 +2222,9 @@ class PanelDirectModalView(discord.ui.View):
             placeholder = "⚙️ เลือก Deobfuscator Engine..."
         else:
             options = [
-                discord.SelectOption(label="🔒 Luarmor Hybrid V6.7.6.7 (แนะนำ)", value="luarmor", description="AST CFF + Dynamic Digest + Double-VM", default=True),
-                discord.SelectOption(label="⚡ Multi-Layer VM", value="recommended", description="CFF State Machine + Double-VM"),
-                discord.SelectOption(label="🌪️ Maximum CFF", value="cff", description="Flattening ลึกสุด + Double-VM"),
-                discord.SelectOption(label="🛡️ Double-VM", value="double_vm", description="Two-tier Instruction Virtualizer"),
-                discord.SelectOption(label="🚀 Fast-VM", value="fast_vm", description="AntiTamper + Vmify (เหมาะกับไฟล์ใหญ่)"),
-                discord.SelectOption(label="📦 Minify", value="minify", description="Mangled Shuffled Identifiers"),
+                discord.SelectOption(label="🔴 Level 3: Maximum Armor (แนะนำ)", value="level3", description="Sentinel Engine v4.0 (JIT Proxy + Coupled CFF)", default=True),
+                discord.SelectOption(label="🟡 Level 2: Balanced Security", value="level2", description="Register VM + S-Box Keystream Fallback"),
+                discord.SelectOption(label="🟢 Level 1: Fast CFF", value="level1", description="Fast Register VM (60 FPS Native Luau)"),
             ]
             placeholder = "🔒 เลือก Obfuscator Engine..."
 
