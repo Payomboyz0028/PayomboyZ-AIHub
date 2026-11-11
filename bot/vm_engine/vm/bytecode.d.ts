@@ -66,7 +66,7 @@ export declare const enum Op {
 }
 export declare function emit(chunk: BytecodeChunk, op: Op, ...args: number[]): void;
 export declare function addConst(chunk: BytecodeChunk, value: Constant): number;
-export declare const RK_OFFSET = 256;
+export declare const RK_OFFSET = 2048;
 export declare function RK(kIndex: number): number;
 export declare function isRK_K(rk: number): boolean;
 export declare function rkToK(rk: number): number;

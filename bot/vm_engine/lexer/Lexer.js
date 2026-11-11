@@ -94,21 +94,34 @@ export class Lexer {
     }
     skipLongComment(eqCount) {
         const endSeq = "]" + "=".repeat(eqCount) + "]";
+        const altEndSeq = eqCount >= 2 ? "[" + "=".repeat(eqCount) + "]" : null;
         let i = 0;
+        let j = 0;
         while (this.pos.offset < this.source.length) {
-            if (this.source[this.pos.offset] === endSeq[i]) {
+            const ch = this.source[this.pos.offset];
+            if (ch === endSeq[i]) {
                 i++;
-                this.advance();
-                if (i === endSeq.length)
+                if (i === endSeq.length) {
+                    this.advance();
                     return;
+                }
             }
             else if (i > 0) {
-                i = 0;
-                // Don't advance — re-check current char against endSeq[0]
+                i = (ch === endSeq[0]) ? 1 : 0;
             }
-            else {
-                this.advance();
+            if (altEndSeq) {
+                if (ch === altEndSeq[j]) {
+                    j++;
+                    if (j === altEndSeq.length) {
+                        this.advance();
+                        return;
+                    }
+                }
+                else if (j > 0) {
+                    j = (ch === altEndSeq[0]) ? 1 : 0;
+                }
             }
+            this.advance();
         }
         this.addError("Unclosed long comment");
     }

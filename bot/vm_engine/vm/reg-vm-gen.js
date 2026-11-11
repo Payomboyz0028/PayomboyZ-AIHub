@@ -1,4 +1,4 @@
-import { REG_OPCODE_COUNT, RK_OFFSET } from "./bytecode.js";
+   import { REG_OPCODE_COUNT, RK_OFFSET } from "./bytecode.js";
 import { randomBytes } from "crypto";
 import { writeFileSync as _dumpWrite } from "fs";
 import { encryptAndEncode } from "./lzma.js";
@@ -13,26 +13,55 @@ function rng() {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 0x100000000;
 }
+const LUA_RESERVED = new Set([
+    "and", "break", "do", "else", "elseif", "end", "false", "for",
+    "function", "goto", "if", "in", "local", "nil", "not", "or",
+    "repeat", "return", "then", "true", "until", "while",
+]);
+// All hardcoded local/parameter identifiers used inside generated VM / helper / handler templates
+const INTERNAL_RESERVED = new Set([
+    "A", "B", "C", "_",
+    "a", "b", "c", "d", "e", "f", "g", "i", "j", "k", "l", "m", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+    "_i", "_j", "_k", "_n", "_o", "_p", "_q", "_r", "_s", "_t", "_u", "_v", "_w", "_x", "_y", "_b", "_d", "_m", "_h", "_g", "_l", "_e", "_f", "_c",
+    "_wi", "_ci", "_ri", "_np", "_ntg", "_nl", "_cw", "_jm", "_km", "_cLen", "_isVararg", "_args", "_ac",
+    "_ex", "_el", "_acc", "base", "step", "idx", "lim", "it", "_tp", "ok", "ok2", "ok3", "v2", "v3", "mt", "proto", "nU",
+    "_ui", "_ud", "_oi", "eh", "_ws", "_we", "_op", "_tg", "_b0", "_b1", "_b2", "_b3", "_pl", "_ph", "_hb", "_sh",
+    "_isR", "_rk", "_ro", "_ip1", "_fe", "_ge", "_re", "_gl", "_fnd", "_rg", "_pe", "_ls", "_sp", "_th",
+    "_dynSalt", "_rs", "_ghostTrap", "_sc", "_0v", "_0i", "_0s", "_un", "_res", "_out", "_b32", "_bxor", "_band", "_opNames",
+    "_hookOk", "_p1", "_p2", "_p3", "_p4", "_rp", "_rc", "_dn", "_rb", "_rn", "_rv", "_oc", "_ln", "_lz", "_lp", "_lc", "_ct", "_ll", "_lo", "_pOk", "_pR",
+    "ra", "rb", "math", "table", "string", "bit32", "bit", "buffer", "game", "workspace", "script", "task", "Instance", "Enum", "debug", "os", "coroutine",
+    "type", "typeof", "pairs", "ipairs", "next", "pcall", "xpcall", "select", "tostring", "tonumber", "assert", "error", "warn", "print",
+    "setmetatable", "getmetatable", "rawget", "rawset", "getfenv", "setfenv", "getgenv", "getrenv", "loadstring", "load", "unpack", "_G", "_ENV", "shared", "cloneref"
+]);
 let _nameCounter = 0;
-function resetNames() { _nameCounter = 0; }
+let _usedNames = new Set();
+function resetNames() { _nameCounter = 0; _usedNames = new Set(); }
 function randomName(len = 6) {
     const pool1 = "abcdefghijklmnopqrstuvwxyzDEFGHIJKLMNOPQRSTUVWXYZ";
     const pool2 = "_abcdefghijklmnopqrstuvwxyz";
-    const id = _nameCounter++;
-    if (id < pool1.length) {
-        return pool1[id];
+    while (true) {
+        const id = _nameCounter++;
+        let cand;
+        if (id < pool1.length) {
+            cand = pool1[id];
+        } else {
+            const id2 = id - pool1.length;
+            if (id2 < pool2.length * pool1.length) {
+                const c1 = pool2[Math.floor(id2 / pool1.length)];
+                const c2 = pool1[id2 % pool1.length];
+                cand = c1 + c2;
+            } else {
+                cand = "_";
+                for (let i = 0; i < Math.max(2, Math.min(len, 4)); i++) {
+                    cand += pool1[Math.floor(rng() * pool1.length)];
+                }
+            }
+        }
+        if (!LUA_RESERVED.has(cand) && !INTERNAL_RESERVED.has(cand) && !_usedNames.has(cand)) {
+            _usedNames.add(cand);
+            return cand;
+        }
     }
-    const id2 = id - pool1.length;
-    if (id2 < pool2.length * pool1.length) {
-        const c1 = pool2[Math.floor(id2 / pool1.length)];
-        const c2 = pool1[id2 % pool1.length];
-        return c1 + c2;
-    }
-    let name = "_";
-    for (let i = 0; i < Math.min(len, 2); i++) {
-        name += pool1[Math.floor(rng() * pool1.length)];
-    }
-    return name;
 }
 function createNameMap(level) {
     if (level === "debug") {
@@ -48,8 +77,13 @@ function createNameMap(level) {
             bPcall: "_pcall", bXpcall: "_xpcall", bSelect: "_select", bType: "_type",
             bTconcat: "_tconcat", bTcreate: "_tcreate", bMfloor: "_mfloor", bIpairs: "_ipairs",
             bTostring: "_tostring", bRawget: "_rawget", bSetmeta: "_setmeta",
-            bBxor: "_bxor", bBand: "_band",
+            bBxor: "_bxor", bBand: "_band", bLsh: "_lsh", bRsh: "_rsh",
+            bSbyte: "_sbyte", bSchar: "_schar",
+            bBcr: "_bcr", bBlen: "_blen", bBr8: "_br8", bBw8: "_bw8", bBcp: "_bcp", bBfs: "_bfs",
             bGetmeta: "_getmeta", bNext: "_next",
+            fnv: "_fnv", pk: "_pk", dec: "_dec", adv: "_adv", wLut: "_wLut",
+            shCache: "_shC", oMap: "_oMap", rb: "_rb", wb: "_wb", cp: "_cp",
+            shVar: "_sh", bBufVar: "_bBuf", hasScrVar: "_hasScr", deadOpVar: "_deadOp",
             s1: "_s1", s2: "_s2", s3: "_s3",
         };
     }
@@ -66,8 +100,13 @@ function createNameMap(level) {
         bPcall: randomName(3), bXpcall: randomName(3), bSelect: randomName(3), bType: randomName(3),
         bTconcat: randomName(3), bTcreate: randomName(3), bMfloor: randomName(3), bIpairs: randomName(3),
         bTostring: randomName(3), bRawget: randomName(3), bSetmeta: randomName(3),
-        bBxor: randomName(3), bBand: randomName(3),
+        bBxor: randomName(3), bBand: randomName(3), bLsh: randomName(3), bRsh: randomName(3),
+        bSbyte: randomName(3), bSchar: randomName(3),
+        bBcr: randomName(3), bBlen: randomName(3), bBr8: randomName(3), bBw8: randomName(3), bBcp: randomName(3), bBfs: randomName(3),
         bGetmeta: randomName(3), bNext: randomName(3),
+        fnv: randomName(4), pk: randomName(3), dec: randomName(4), adv: randomName(3), wLut: randomName(3),
+        shCache: randomName(4), oMap: randomName(3), rb: randomName(3), wb: randomName(3), cp: randomName(3),
+        shVar: randomName(3), bBufVar: randomName(3), hasScrVar: randomName(3), deadOpVar: randomName(3),
         s1: randomName(2), s2: randomName(2), s3: randomName(2),
     };
 }
@@ -158,25 +197,31 @@ function featureEnabled(options, flag, levelDefault) {
 function shuffleOpcodes(doShuffle) {
     const encode = [];
     const decode = [];
+    const encodeAlt = [];
     for (let i = 0; i < REG_OPCODE_COUNT; i++) {
         encode[i] = i;
         decode[i] = i;
+        encodeAlt[i] = i + REG_OPCODE_COUNT;
     }
     if (!doShuffle)
-        return { encode, decode };
+        return { encode, decode, encodeAlt };
     for (let i = REG_OPCODE_COUNT - 1; i > 0; i--) {
         const j = Math.floor(rng() * (i + 1));
         [encode[i], encode[j]] = [encode[j], encode[i]];
     }
+    for (let i = REG_OPCODE_COUNT - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [encodeAlt[i], encodeAlt[j]] = [encodeAlt[j], encodeAlt[i]];
+    }
     for (let i = 0; i < REG_OPCODE_COUNT; i++)
         decode[encode[i]] = i;
-    return { encode, decode };
+    return { encode, decode, encodeAlt };
 }
 function generateArgPerms(doRemap) {
     const ALL_PERMS = [[1, 2, 3], [1, 3, 2], [2, 1, 3], [2, 3, 1], [3, 1, 2], [3, 2, 1]];
     const perms = [];
     for (let op = 0; op < REG_OPCODE_COUNT; op++) {
-        if (!doRemap || op === 0 /* RegOp.NOP */ || op === 44 /* RegOp.EXTRAARG */) {
+        if (!doRemap || op === 0 /* RegOp.NOP */ || op === 44 /* RegOp.EXTRAARG */ || (op >= 45 && op <= 56)) {
             perms[op] = [1, 2, 3];
         }
         else {
@@ -185,13 +230,13 @@ function generateArgPerms(doRemap) {
     }
     return perms;
 }
-function mapRegBytecode(code, encode, argPerm) {
+function mapRegBytecode(code, encode, argPerm, encodeAlt) {
     const out = [...code];
     for (let i = 0; i < out.length; i += 4) {
         const realOp = out[i];
         if (realOp >= 0 && realOp < encode.length) {
             const A = out[i + 1], B = out[i + 2], C = out[i + 3];
-            out[i] = encode[realOp];
+            out[i] = (encodeAlt && rng() > 0.5) ? encodeAlt[realOp] : encode[realOp];
             const p = argPerm[realOp];
             out[i + p[0]] = A;
             out[i + p[1]] = B;
@@ -200,11 +245,11 @@ function mapRegBytecode(code, encode, argPerm) {
     }
     return out;
 }
-function mapRegChunk(chunk, encode, argPerm) {
-    chunk.code = mapRegBytecode(chunk.code, encode, argPerm);
+function mapRegChunk(chunk, encode, argPerm, encodeAlt) {
+    chunk.code = mapRegBytecode(chunk.code, encode, argPerm, encodeAlt);
     if (chunk.protos)
         for (const p of chunk.protos)
-            mapRegChunk(p, encode, argPerm);
+            mapRegChunk(p, encode, argPerm, encodeAlt);
 }
 const SPIRAL_PRIMES = [
     3, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79,
@@ -263,59 +308,225 @@ function serializeConstant(v, ctx, idx) {
         if (ctx.encodeStrings) {
             const bytes = toUTF8Bytes(v);
             const encoded = encodeStringBytes(bytes, ctx, idx);
-            if (rng() < 0.5) {
-                let lit = '"';
-                for (const b of encoded) {
-                    if (b === 92)
-                        lit += '\\\\';
-                    else if (b === 34)
-                        lit += '\\"';
-                    else if (b === 10)
-                        lit += '\\n';
-                    else if (b === 13)
-                        lit += '\\r';
-                    else if (b === 0)
-                        lit += '\\000';
-                    else if (b < 32 || b > 126)
-                        lit += `\\${b.toString().padStart(3, '0')}`;
-                    else
-                        lit += String.fromCharCode(b);
-                }
-                lit += '"';
-                return lit;
-            }
             return `{${encoded.join(",")}}`;
         }
         return luaStringLiteral(v);
     }
     return "nil";
 }
-function serializeConstants(K, ctx) {
+function serializeConstants(K, ctx, allowIIFE = false) {
+    if (!K || K.length === 0)
+        return "{}";
+    if (allowIIFE && K.length > 40) {
+        const kv = ctx.level !== "debug" ? randomName(2) : "_kt";
+        const parts = [`(function() local ${kv}={}`];
+        for (let i = 0; i < K.length; i++) {
+            parts.push(`${kv}[${i + 1}]=${serializeConstant(K[i], ctx, i)}`);
+        }
+        parts.push(`return ${kv} end)()`);
+        return parts.join(";");
+    }
     return `{${K.map((v, i) => serializeConstant(v, ctx, i)).join(",")}}`;
 }
-function serializeRegCode(code, ctx) {
-    if (ctx && ctx.rotSeed > 0) {
-        const out = [...code];
-        for (let i = 0; i < out.length; i += 4) {
-            const luaIp = i + 1;
-            const key = (ctx.rotSeed + luaIp * ctx.rotStep + Math.imul(luaIp, luaIp) * ctx.rotStep2) & 0xFF;
-            out[i] ^= key;
-        }
-        return `{${out.join(",")}}`;
+function fnv1a32(str) {
+    let h = 0x811c9dc5 >>> 0;
+    const bytes = toUTF8Bytes(str);
+    for (let i = 0; i < bytes.length; i++) {
+        h ^= bytes[i];
+        h = Math.imul(h, 0x01000193) >>> 0;
     }
-    return `{${code.join(",")}}`;
+    return h >>> 0;
+}
+function luaByteLiteral(bytes) {
+    let out = '"';
+    for (let i = 0; i < bytes.length; i++) {
+        const b = bytes[i] & 0xFF;
+        if (b === 34)
+            out += '\\"';
+        else if (b === 92)
+            out += '\\\\';
+        else if (b === 10)
+            out += '\\n';
+        else if (b === 13)
+            out += '\\r';
+        else if (b < 32 || b > 126)
+            out += '\\' + b.toString().padStart(3, '0');
+        else
+            out += String.fromCharCode(b);
+    }
+    return out + '"';
+}
+function valWidthCode(v) {
+    if (v === 0)
+        return 0;
+    if (v >= 0 && v <= 255)
+        return 1;
+    if (v >= -32768 && v <= 32767)
+        return 2;
+    return 3;
+}
+const WIDTH_BYTES = [0, 1, 2, 4];
+function writeIntBytes(out, val, wCode) {
+    if (wCode === 0)
+        return;
+    if (wCode === 1) {
+        out.push(val & 0xFF);
+    }
+    else if (wCode === 2) {
+        const u = val < 0 ? val + 65536 : val;
+        out.push(u & 0xFF, (u >>> 8) & 0xFF);
+    }
+    else {
+        const u = val >>> 0;
+        out.push(u & 0xFF, (u >>> 8) & 0xFF, (u >>> 16) & 0xFF, (u >>> 24) & 0xFF);
+    }
+}
+function packVariableBytecode(code4, ctx) {
+    const nInstr = Math.floor(code4.length / 4);
+    if (nInstr === 0)
+        return [];
+    const doShuf = ctx && ctx.doShuffle;
+    const encode = ctx?.opcodeEncode;
+    const encodeAlt = ctx?.opcodeAlt;
+    const argPerm = ctx?.argPerm;
+    const tagMask = (ctx && ctx.tagMask) ? (ctx.tagMask & 0xFF) : 0;
+
+    const instrs = new Array(nInstr);
+    const widths = new Array(nInstr);
+    const salts = new Array(nInstr);
+    for (let idx = 0; idx < nInstr; idx++) {
+        const base = idx * 4;
+        const realOp = code4[base] | 0;
+        const rawA = code4[base + 1] | 0;
+        const rawB = code4[base + 2] | 0;
+        const rawC = code4[base + 3] | 0;
+        const isJump = (realOp === 21 || realOp === 30 || realOp === 31);
+        const targetIdx = isJump ? Math.max(0, Math.min(nInstr, idx + 1 + rawB)) : -1;
+        const p = (argPerm && argPerm[realOp]) ? argPerm[realOp] : [1, 2, 3];
+        const slots = [0, 0, 0];
+        slots[p[0] - 1] = rawA;
+        slots[p[1] - 1] = isJump ? (rawB * 4) : rawB;
+        slots[p[2] - 1] = rawC;
+        instrs[idx] = { realOp, rawA, rawB, rawC, isJump, targetIdx, p, slots };
+        widths[idx] = [valWidthCode(slots[0]), valWidthCode(slots[1]), valWidthCode(slots[2])];
+        salts[idx] = (ctx && ctx.level !== "debug") ? Math.floor(rng() * 4) : 0;
+    }
+
+    const byteOff = new Array(nInstr + 1);
+    let changed = true;
+    let pass = 0;
+    while (changed && pass < 8) {
+        changed = false;
+        pass++;
+        let off = 0;
+        for (let idx = 0; idx < nInstr; idx++) {
+            byteOff[idx] = off;
+            const w = widths[idx];
+            off += 2 + WIDTH_BYTES[w[0]] + WIDTH_BYTES[w[1]] + WIDTH_BYTES[w[2]];
+        }
+        byteOff[nInstr] = off;
+        for (let idx = 0; idx < nInstr; idx++) {
+            const ins = instrs[idx];
+            if (!ins.isJump)
+                continue;
+            const delta = byteOff[ins.targetIdx] - byteOff[idx + 1];
+            const needW = valWidthCode(delta);
+            const slotB = ins.p[1] - 1;
+            if (needW > widths[idx][slotB]) {
+                widths[idx][slotB] = needW;
+                changed = true;
+            }
+        }
+    }
+    let totalOff = 0;
+    for (let idx = 0; idx < nInstr; idx++) {
+        byteOff[idx] = totalOff;
+        const w = widths[idx];
+        totalOff += 2 + WIDTH_BYTES[w[0]] + WIDTH_BYTES[w[1]] + WIDTH_BYTES[w[2]];
+    }
+    byteOff[nInstr] = totalOff;
+
+    const out = [];
+    for (let idx = 0; idx < nInstr; idx++) {
+        const ins = instrs[idx];
+        const realOp = ins.realOp;
+        let mappedOp = realOp;
+        if (doShuf && encode && realOp >= 0 && realOp < encode.length) {
+            mappedOp = (encodeAlt && encodeAlt[realOp] !== undefined && rng() > 0.5)
+                ? encodeAlt[realOp]
+                : encode[realOp];
+        }
+        const slots = [...ins.slots];
+        if (ins.isJump) {
+            slots[ins.p[1] - 1] = byteOff[ins.targetIdx] - byteOff[idx + 1];
+        }
+        const w = widths[idx];
+        const rawTag = (w[0] & 3) | ((w[1] & 3) << 2) | ((w[2] & 3) << 4) | ((salts[idx] & 3) << 6);
+        out.push(mappedOp & 0xFF);
+        out.push((rawTag ^ tagMask) & 0xFF);
+        writeIntBytes(out, slots[0], w[0]);
+        writeIntBytes(out, slots[1], w[1]);
+        writeIntBytes(out, slots[2], w[2]);
+    }
+    return out;
+}
+function serializeRegCode(code, ctx) {
+    const packed = packVariableBytecode(code, ctx);
+    if (ctx && (ctx.rotSeed > 0 || ctx.rotStep > 0 || ctx.rotStep2 > 0 || ctx.rotStep3 > 0)) {
+        const enc = new Array(packed.length);
+        for (let j = 0; j < packed.length; j++) {
+            const pl = j & 0xFF;
+            const ph = (j >>> 8) & 0xFF;
+            const key = (ctx.rotSeed + pl * ctx.rotStep + pl * pl * ctx.rotStep2 + ph * ctx.rotStep3) & 0xFF;
+            enc[j] = (packed[j] ^ key) & 0xFF;
+        }
+        return luaByteLiteral(enc);
+    }
+    return luaByteLiteral(packed);
 }
 function serializeRegProtos(protos, ctx) {
     if (!protos || protos.length === 0)
         return "{}";
     const pk = ctx.protoKeys;
     const usePositional = ctx.level !== "debug";
-    const items = [];
-    for (const p of protos) {
-        const mappedCode = ctx.doShuffle ? mapRegBytecode(p.code, ctx.opcodeEncode, ctx.argPerm) : p.code;
+    const hasNested = protos.some(p => p.protos && p.protos.length > 0);
+    if (!hasNested && protos.length <= 12) {
+        const items = [];
+        for (const p of protos) {
+            const sK = serializeConstants(p.K, ctx);
+            const sC = serializeRegCode(p.code, ctx);
+            let sU = "nil";
+            if (p.upvalues && p.upvalues.length > 0) {
+                sU = `{${p.upvalues.map(uv => `{${uv[0]},${uv[1]}}`).join(",")}}`;
+            }
+            const nP = p.nParams ?? 0;
+            const mR = p.maxRegs ?? 0;
+            const isVA = p.isVararg ? "true" : "false";
+            if (usePositional) {
+                items.push(`{${sK},${sC},{},${sU},${nP},${mR},${isVA}}`);
+            }
+            else {
+                items.push(`{${pk.pK}=${sK},${pk.pC}=${sC},${pk.pP}={},${pk.pU}=${sU},${pk.pN}=${nP},mR=${mR},vA=${isVA}}`);
+            }
+        }
+        return `{${items.join(",")}}`;
+    }
+    const pv = ctx.level !== "debug" ? randomName(2) : "_pt";
+    const stmts = [`(function() local ${pv}={}`];
+    let nextSlot = 1;
+    function emitProto(p) {
+        const childSlots = [];
+        if (p.protos && p.protos.length > 0) {
+            for (const cp of p.protos) {
+                childSlots.push(emitProto(cp));
+            }
+        }
+        const slot = nextSlot++;
         const sK = serializeConstants(p.K, ctx);
-        const sC = serializeRegCode(mappedCode, ctx);
-        const sP = serializeRegProtos(p.protos, ctx);
+        const sC = serializeRegCode(p.code, ctx);
+        const sP = childSlots.length > 0
+            ? `{${childSlots.map(s => `${pv}[${s}]`).join(",")}}`
+            : "{}";
         let sU = "nil";
         if (p.upvalues && p.upvalues.length > 0) {
             sU = `{${p.upvalues.map(uv => `{${uv[0]},${uv[1]}}`).join(",")}}`;
@@ -324,13 +535,19 @@ function serializeRegProtos(protos, ctx) {
         const mR = p.maxRegs ?? 0;
         const isVA = p.isVararg ? "true" : "false";
         if (usePositional) {
-            items.push(`{${sK},${sC},${sP},${sU},${nP},${mR},${isVA}}`);
+            stmts.push(`${pv}[${slot}]={${sK},${sC},${sP},${sU},${nP},${mR},${isVA}}`);
         }
         else {
-            items.push(`{${pk.pK}=${sK},${pk.pC}=${sC},${pk.pP}=${sP},${pk.pU}=${sU},${pk.pN}=${nP},mR=${mR},vA=${isVA}}`);
+            stmts.push(`${pv}[${slot}]={${pk.pK}=${sK},${pk.pC}=${sC},${pk.pP}=${sP},${pk.pU}=${sU},${pk.pN}=${nP},mR=${mR},vA=${isVA}}`);
         }
+        return slot;
     }
-    return `{${items.join(",")}}`;
+    const rootSlots = [];
+    for (const p of protos) {
+        rootSlots.push(emitProto(p));
+    }
+    stmts.push(`return {${rootSlots.map(s => `${pv}[${s}]`).join(",")}} end)()`);
+    return stmts.join(";");
 }
 const REG_OP_NAMES = [
     "NOP", "LOADK", "LOADNIL", "LOADBOOL", "MOVE", "GETGLOBAL", "SETGLOBAL",
@@ -350,26 +567,19 @@ function registerHandler(op, gen) {
 registerHandler(0 /* RegOp.NOP */, () => ``);
 registerHandler(1 /* RegOp.LOADK */, (n) => `${n.R}[A+1]=${n.K}[B+1]`);
 registerHandler(2 /* RegOp.LOADNIL */, (n) => `for _i=A,A+B do ${n.R}[_i+1]=nil end`);
-registerHandler(3 /* RegOp.LOADBOOL */, (n) => `${n.R}[A+1]=(B~=0);if C~=0 then ${n.ip}=${n.ip}+4 end`);
+registerHandler(3 /* RegOp.LOADBOOL */, (n) => `${n.R}[A+1]=(B~=0);if C~=0 then ${n.ip}=${n.adv}(${n.ip},${n.shVar}) end`);
 registerHandler(4 /* RegOp.MOVE */, (n) => `${n.R}[A+1]=${n.R}[B+1]`);
-registerHandler(43 /* RegOp.LOADKX */, (n) => `local ex=${n.code}[${n.ip}+1];${n.R}[A+1]=${n.K}[ex+1];${n.ip}=${n.ip}+4`);
+registerHandler(43 /* RegOp.LOADKX */, (n) => `do local _,_ex,_,_,_el=${n.dec}(${n.shVar},nil,${n.ip}-1,false,nil);${n.R}[A+1]=${n.K}[_ex+1];if ${n.bBufVar} then for _wi=0,_el-1 do ${n.wb}(${n.bBufVar},${n.ip}-1+_wi,${n.deadOpVar}) end end;${n.ip}=${n.ip}+_el;${n.hasScrVar}=false end`);
 registerHandler(44 /* RegOp.EXTRAARG */, () => ``);
 registerHandler(5 /* RegOp.GETGLOBAL */, (n) => {
-    const dbg = process.env.DEBUG_VM === '1';
-    const nilChk = dbg ? `;if ${n.R}[A+1]==nil then warn("[GETGLOBAL] nil: "..tostring(_k)) end` : '';
-    return `do local _k=${n.K}[B+1];if ${n.ic}[1]==_k then ${n.R}[A+1]=${n.ic}[2] else local _v=${n.env}[_k];${n.R}[A+1]=_v;${n.ic}[1]=_k;${n.ic}[2]=_v end${nilChk} end`;
+    return `do local _k=${n.K}[B+1];${n.R}[A+1]=${n.env}[_k] end`;
 });
 registerHandler(6 /* RegOp.SETGLOBAL */, (n) => `do ${n.env}[${n.K}[B+1]]=${n.R}[A+1];${n.ic}[1]=nil end`);
-registerHandler(7 /* RegOp.GETTABLE */, (n) => {
-    const dbg = process.env.DEBUG_VM === '1';
-    if (dbg)
-        return `do if ${n.R}[B+1]==nil then warn("[GETTABLE] nil base, key="..tostring(${n.RK}(C)).." K="..tostring(${n.K}[B+1])) end;${n.R}[A+1]=${n.R}[B+1][${n.RK}(C)] end`;
-    return `${n.R}[A+1]=${n.R}[B+1][${n.RK}(C)]`;
-});
+registerHandler(7 /* RegOp.GETTABLE */, (n) => `${n.R}[A+1]=${n.R}[B+1][${n.RK}(C)]`);
 registerHandler(8 /* RegOp.SETTABLE */, (n) => `${n.R}[A+1][${n.RK}(B)]=${n.RK}(C)`);
 registerHandler(9 /* RegOp.NEWTABLE */, (n) => `${n.R}[A+1]={}`);
 registerHandler(33 /* RegOp.SETLIST */, (n) => `do local t=${n.R}[A+1];local _b=B;if _b==0 then _b=${n.top}-(A+1) end;local base=C-1;for _i=1,_b do t[base+_i]=${n.R}[A+1+_i] end end`);
-registerHandler(36 /* RegOp.SELF */, (n) => `${n.R}[A+2]=${n.R}[B+1];${n.R}[A+1]=${n.R}[B+1][${n.RK}(C)]`);
+registerHandler(36 /* RegOp.SELF */, (n) => `do local _o=${n.R}[B+1];${n.R}[A+2]=_o;${n.R}[A+1]=_o[${n.RK}(C)] end`);
 registerHandler(10 /* RegOp.ADD */, (n) => `${n.R}[A+1]=${n.RK}(B)+${n.RK}(C)`);
 registerHandler(11 /* RegOp.SUB */, (n) => `${n.R}[A+1]=${n.RK}(B)-${n.RK}(C)`);
 registerHandler(12 /* RegOp.MUL */, (n) => `${n.R}[A+1]=${n.RK}(B)*${n.RK}(C)`);
@@ -380,14 +590,13 @@ registerHandler(16 /* RegOp.IDIV */, (n) => `${n.R}[A+1]=${n.bMfloor}(${n.RK}(B)
 registerHandler(17 /* RegOp.UNM */, (n) => `${n.R}[A+1]=-${n.R}[B+1]`);
 registerHandler(18 /* RegOp.NOT */, (n) => `${n.R}[A+1]=not ${n.R}[B+1]`);
 registerHandler(19 /* RegOp.LEN */, (n) => `${n.R}[A+1]=#${n.R}[B+1]`);
-registerHandler(20 /* RegOp.CONCAT */, (n) => `do if C-B<=1 then ${n.R}[A+1]=${n.R}[B+1]..${n.R}[C+1] ` +
-    `else local _t={};for _i=B,C do _t[#_t+1]=${n.R}[_i+1] end;${n.R}[A+1]=${n.bTconcat}(_t) end end`);
-registerHandler(21 /* RegOp.JMP */, (n) => `${n.ip}=${n.ip}+B*4`);
-registerHandler(22 /* RegOp.EQ */, (n) => `if (${n.RK}(B)==${n.RK}(C))~=(A~=0) then ${n.ip}=${n.ip}+4 end`);
-registerHandler(23 /* RegOp.LT */, (n) => `if (${n.RK}(B)<${n.RK}(C))~=(A~=0) then ${n.ip}=${n.ip}+4 end`);
-registerHandler(24 /* RegOp.LE */, (n) => `if (${n.RK}(B)<=${n.RK}(C))~=(A~=0) then ${n.ip}=${n.ip}+4 end`);
-registerHandler(25 /* RegOp.TEST */, (n) => `if (not ${n.R}[A+1])==(C~=0) then ${n.ip}=${n.ip}+4 end`);
-registerHandler(26 /* RegOp.TESTSET */, (n) => `if (not ${n.R}[B+1])==(C~=0) then ${n.ip}=${n.ip}+4 else ${n.R}[A+1]=${n.R}[B+1] end`);
+registerHandler(20 /* RegOp.CONCAT */, (n) => `do local _acc=${n.R}[C+1];for _i=C-1,B,-1 do _acc=${n.R}[_i+1].._acc end;${n.R}[A+1]=_acc end`);
+registerHandler(21 /* RegOp.JMP */, (n) => `${n.ip}=${n.ip}+B`);
+registerHandler(22 /* RegOp.EQ */, (n) => `if (${n.RK}(B)==${n.RK}(C))~=(A~=0) then ${n.ip}=${n.adv}(${n.ip},${n.shVar}) end`);
+registerHandler(23 /* RegOp.LT */, (n) => `if (${n.RK}(B)<${n.RK}(C))~=(A~=0) then ${n.ip}=${n.adv}(${n.ip},${n.shVar}) end`);
+registerHandler(24 /* RegOp.LE */, (n) => `if (${n.RK}(B)<=${n.RK}(C))~=(A~=0) then ${n.ip}=${n.adv}(${n.ip},${n.shVar}) end`);
+registerHandler(25 /* RegOp.TEST */, (n) => `if (not ${n.R}[A+1])==(C~=0) then ${n.ip}=${n.adv}(${n.ip},${n.shVar}) end`);
+registerHandler(26 /* RegOp.TESTSET */, (n) => `if (not ${n.R}[B+1])==(C~=0) then ${n.ip}=${n.adv}(${n.ip},${n.shVar}) else ${n.R}[A+1]=${n.R}[B+1] end`);
 registerHandler(27 /* RegOp.CALL */, (n) => {
     const storeR = () => `if C==0 then for _i=1,r.n do ${n.R}[A+_i]=r[_i] end;${n.top}=A+r.n ` +
         `else for _i=1,C-1 do ${n.R}[A+_i]=r[_i] end end`;
@@ -408,16 +617,16 @@ registerHandler(28 /* RegOp.TAILCALL */, (n) => `do local f=${n.R}[A+1];` +
 registerHandler(29 /* RegOp.RETURN */, (n) => `do if B==0 then return ${n.tUnpack}(${n.R},A+1,${n.top}) ` +
     `elseif B==1 then return ` +
     `else return ${n.tUnpack}(${n.R},A+1,A+B-1) end end`);
-registerHandler(30 /* RegOp.FORPREP */, (n) => `${n.R}[A+1]=${n.R}[A+1]-${n.R}[A+3];${n.ip}=${n.ip}+B*4`);
+registerHandler(30 /* RegOp.FORPREP */, (n) => `${n.R}[A+1]=${n.R}[A+1]-${n.R}[A+3];${n.ip}=${n.ip}+B`);
 registerHandler(31 /* RegOp.FORLOOP */, (n) => `do local step=${n.R}[A+3];local idx=${n.R}[A+1]+step;${n.R}[A+1]=idx;` +
-    `local lim=${n.R}[A+2];if step>0 then if idx<=lim then ${n.ip}=${n.ip}+B*4;${n.R}[A+4]=idx end ` +
-    `else if idx>=lim then ${n.ip}=${n.ip}+B*4;${n.R}[A+4]=idx end end end`);
+    `local lim=${n.R}[A+2];if step>0 then if idx<=lim then ${n.ip}=${n.ip}+B;${n.R}[A+4]=idx end ` +
+    `else if idx>=lim then ${n.ip}=${n.ip}+B;${n.R}[A+4]=idx end end end`);
 registerHandler(32 /* RegOp.TFORLOOP */, (n) => `do local f=${n.R}[A+1];local s=${n.R}[A+2];local v=${n.R}[A+3];` +
     `local r={f(s,v)};for _i=1,C do ${n.R}[A+3+_i]=r[_i] end;` +
-    `if r[1]~=nil then ${n.R}[A+3]=r[1];${n.ip}=${n.ip}+4 end end`);
-registerHandler(42 /* RegOp.ITERPREP */, (n) => `do local it=${n.R}[A+1];if ${n.bType}(it)=="table" then ` +
+    `if r[1]~=nil then ${n.R}[A+3]=r[1];${n.ip}=${n.adv}(${n.ip},${n.shVar}) end end`);
+registerHandler(42 /* RegOp.ITERPREP */, (n) => `do local it=${n.R}[A+1];local _tp=${n.bType}(it);if _tp=="table" or _tp=="userdata" then ` +
     `local ok,mt=${n.bPcall}(${n.bGetmeta},it);if ok and ${n.bType}(mt)=="table" and mt.__iter then ` +
-    `${n.R}[A+1]=mt.__iter(it) else ${n.R}[A+1]=${n.bNext};${n.R}[A+2]=it;${n.R}[A+3]=nil end end end`);
+    `${n.R}[A+1],${n.R}[A+2],${n.R}[A+3]=mt.__iter(it) elseif _tp=="table" then ${n.R}[A+1]=${n.bNext};${n.R}[A+2]=it;${n.R}[A+3]=nil end end end`);
 registerHandler(37 /* RegOp.GETUPVAL */, (n) => `do local _b=${n.upvalues}[B+1];if _b[2] then ${n.R}[A+1]=_b[1][_b[2]] else ${n.R}[A+1]=_b[1] end end`);
 registerHandler(38 /* RegOp.SETUPVAL */, (n) => `do local _b=${n.upvalues}[B+1];if _b[2] then _b[1][_b[2]]=${n.R}[A+1] else _b[1]=${n.R}[A+1] end end`);
 registerHandler(39 /* RegOp.CLOSEUPVAL */, (n) => `do local _n=0;for _i=1,#${n.openUVs} do local _b=${n.openUVs}[_i];if _b[2]>=A+1 then ` +
@@ -443,19 +652,21 @@ registerHandler(34 /* RegOp.CLOSURE */, (n, ctx) => {
         `${n.R}[A+1]=function(...) return ${n.run}(proto${gK},proto${gC},proto${gP},proto${gU} and nU or {},proto${gN},proto${gMR},proto${gVA},${n.env},...) end ` +
         `else ${n.R}[A+1]=nil end end`;
 });
-registerHandler(40 /* RegOp.PCALL */, (n) => `do local f=${n.R}[A+1];local r;` +
+registerHandler(40 /* RegOp.PCALL */, (n) => `do local f=${n.R}[A+1];local _we=B==0 and ${n.top} or A+B;local r;` +
     `if B==1 then r=${n.tPack}(${n.bPcall}(f)) ` +
     `elseif B==2 then r=${n.tPack}(${n.bPcall}(f,${n.R}[A+2])) ` +
     `elseif B==3 then r=${n.tPack}(${n.bPcall}(f,${n.R}[A+2],${n.R}[A+3])) ` +
-    `else r=${n.tPack}(${n.bPcall}(f,${n.tUnpack}(${n.R},A+2,A+B))) end;` +
+    `else r=${n.tPack}(${n.bPcall}(f,${n.tUnpack}(${n.R},A+2,_we))) end;` +
     `if C==0 then for _i=1,r.n do ${n.R}[A+_i]=r[_i] end;${n.top}=A+r.n ` +
-    `else for _i=1,C-1 do ${n.R}[A+_i]=r[_i] end end end`);
-registerHandler(41 /* RegOp.XPCALL */, (n) => `do local f=${n.R}[A+1];local eh=${n.R}[A+2];local r;` +
-    `if B<=2 then r=${n.tPack}(${n.bXpcall}(f,eh)) ` +
+    `else for _i=1,C-1 do ${n.R}[A+_i]=r[_i] end end;` +
+    `if B==0 or B>1 then local _ws=C==0 and (A+r.n+1) or (A+C);for _wi=_ws,_we do ${n.R}[_wi]=nil end end end`);
+registerHandler(41 /* RegOp.XPCALL */, (n) => `do local f=${n.R}[A+1];local eh=${n.R}[A+2];local _we=B==0 and ${n.top} or A+B;local r;` +
+    `if B==1 or B==2 then r=${n.tPack}(${n.bXpcall}(f,eh)) ` +
     `elseif B==3 then r=${n.tPack}(${n.bXpcall}(f,eh,${n.R}[A+3])) ` +
-    `else r=${n.tPack}(${n.bXpcall}(f,eh,${n.tUnpack}(${n.R},A+3,A+B))) end;` +
+    `else r=${n.tPack}(${n.bXpcall}(f,eh,${n.tUnpack}(${n.R},A+3,_we))) end;` +
     `if C==0 then for _i=1,r.n do ${n.R}[A+_i]=r[_i] end;${n.top}=A+r.n ` +
-    `else for _i=1,C-1 do ${n.R}[A+_i]=r[_i] end end end`);
+    `else for _i=1,C-1 do ${n.R}[A+_i]=r[_i] end end;` +
+    `if B==0 or B>2 then local _ws=C==0 and (A+r.n+1) or (A+C);for _wi=_ws,_we do ${n.R}[_wi]=nil end end end`);
 registerHandler(45 /* RegOp.FUSED_TEST_JMP */, (n) => {
     const v = Math.floor(rng() * 3);
     if (v === 0)
@@ -499,10 +710,10 @@ registerHandler(50 /* RegOp.FUSED_GGET */, (n) => {
     const dbg = process.env.DEBUG_VM === '1';
     const nilG = dbg ? `if _g==nil then warn("[FUSED_GGET] nil global: "..tostring(${n.K}[B+1])) end;` : '';
     if (v === 0)
-        return `do local _A2=${n.code}[${n.ip}+1];local _C2=${n.code}[${n.ip}+3];local _g=${n.env}[${n.K}[B+1]];${nilG}${n.R}[A+1]=_g;${n.R}[_A2+1]=_g[${n.RK}(_C2)];${n.ip}=${n.ip}+4 end`;
+        return `do local _A2=${n.code}[${n.ip}+1];local _C2=${n.code}[${n.ip}+3];local _g=${n.env}[${n.K}[B+1]];${nilG}${n.R}[A+1]=_g;if _g~=nil then ${n.R}[_A2+1]=_g[${n.RK}(_C2)] else ${n.R}[_A2+1]=nil end;${n.ip}=${n.ip}+4 end`;
     if (v === 1)
-        return `do local _A2=${n.code}[${n.ip}+1];local _C2=${n.code}[${n.ip}+3];local _g=${n.env}[${n.K}[B+1]];${nilG}${n.R}[A+1]=_g;${n.R}[_A2+1]=_g[${n.RK}(_C2)];${n.ip}=${n.ip}+4 end`;
-    return `do local _g=${n.env}[${n.K}[B+1]];${nilG}${n.R}[A+1]=_g;local _k=${n.RK}(${n.code}[${n.ip}+3]);${n.R}[${n.code}[${n.ip}+1]+1]=_g[_k];${n.ip}=${n.ip}+4 end`;
+        return `do local _A2=${n.code}[${n.ip}+1];local _C2=${n.code}[${n.ip}+3];local _g=${n.env}[${n.K}[B+1]];${nilG}${n.R}[A+1]=_g;if _g~=nil then ${n.R}[_A2+1]=_g[${n.RK}(_C2)] else ${n.R}[_A2+1]=nil end;${n.ip}=${n.ip}+4 end`;
+    return `do local _g=${n.env}[${n.K}[B+1]];${nilG}${n.R}[A+1]=_g;local _k=${n.RK}(${n.code}[${n.ip}+3]);if _g~=nil then ${n.R}[${n.code}[${n.ip}+1]+1]=_g[_k] else ${n.R}[${n.code}[${n.ip}+1]+1]=nil end;${n.ip}=${n.ip}+4 end`;
 });
 registerHandler(51 /* RegOp.FUSED_LOADKK */, (n) => {
     const v = Math.floor(rng() * 2);
@@ -527,16 +738,14 @@ registerHandler(53 /* RegOp.FUSED_SELF_CALL */, (n) => {
         `if _C2==0 then for _i=1,r.n do ${n.R}[A+_i]=r[_i] end;${n.top}=A+r.n ` +
         `else for _i=1,_C2-1 do ${n.R}[A+_i]=r[_i] end end`;
     if (v === 0)
-        return `do ${n.R}[A+2]=${n.R}[B+1];local f=${n.R}[B+1][${n.RK}(C)];${n.R}[A+1]=f;${callBody} end`;
-    return `do local _s=${n.R}[B+1];${n.R}[A+2]=_s;local f=_s[${n.RK}(C)];${n.R}[A+1]=f;${callBody} end`;
+        return `do local _s=${n.R}[B+1];${n.R}[A+2]=_s;local f;if _s~=nil then f=_s[${n.RK}(C)] end;${n.R}[A+1]=f;${callBody} end`;
+    return `do local _s=${n.R}[B+1];${n.R}[A+2]=_s;local f;if _s~=nil then f=_s[${n.RK}(C)] end;${n.R}[A+1]=f;${callBody} end`;
 });
 registerHandler(54 /* RegOp.FUSED_GGET_CALL */, (n) => {
     const v = Math.floor(rng() * 2);
     const readSlot2 = `local _A2=${n.code}[${n.ip}+1];local _C2=${n.code}[${n.ip}+3]`;
     const readSlot3 = `local _A3=${n.code}[${n.ip}+5];local _B3=${n.code}[${n.ip}+6];local _C3=${n.code}[${n.ip}+7]`;
-    const gget = v === 0
-        ? `local _g=${n.env}[${n.K}[B+1]];${n.R}[A+1]=_g;local f=_g[${n.RK}(_C2)];${n.R}[_A2+1]=f`
-        : `local _g=${n.env}[${n.K}[B+1]];${n.R}[A+1]=_g;${n.R}[_A2+1]=_g[${n.RK}(_C2)];local f=${n.R}[_A2+1]`;
+    const gget = `local _g=${n.env}[${n.K}[B+1]];${n.R}[A+1]=_g;local f;if _g~=nil then f=_g[${n.RK}(_C2)] end;${n.R}[_A2+1]=f`;
     const callBody = `local r;` +
         `if _B3==1 then r=${n.tPack}(f()) ` +
         `elseif _B3==2 then r=${n.tPack}(f(${n.R}[_A3+2])) ` +
@@ -770,8 +979,11 @@ function flattenControlFlow(chunk) {
             }
         }
         const newCode = [21 /* RegOp.JMP */, 0, entryB, 0];
-        for (const b of blocks)
-            newCode.push(...b.ins);
+        for (const b of blocks) {
+            for (let i = 0; i < b.ins.length; i++) {
+                newCode.push(b.ins[i]);
+            }
+        }
         totalBlocks += blocks.length;
         return newCode;
     }
@@ -912,6 +1124,10 @@ function buildHandlerBodies(n, ctx, usedOps) {
         const remap = `local A,B,C=${slots[p[0] - 1]},${slots[p[1] - 1]},${slots[p[2] - 1]};`;
         const noise = doNoise ? generateHandlerNoise(n, op) : '';
         bodies.set(shuffled, remap + noise + body);
+        if (ctx.opcodeAlt && ctx.opcodeAlt[op] !== undefined) {
+            const altNoise = doNoise ? generateHandlerNoise(n, op) : '';
+            bodies.set(ctx.opcodeAlt[op], remap + altNoise + body);
+        }
     }
     return bodies;
 }
@@ -920,19 +1136,32 @@ function buildBuiltinCaptures(ctx) {
     if (ctx.level === "debug") {
         const captures = [
             [n.bPcall, "pcall"], [n.bXpcall, "xpcall"], [n.bSelect, "select"], [n.bType, "type"],
-            [n.tPack, "table.pack"], [n.tUnpack, "table.unpack"], [n.bTcreate, "table.create"],
+            [n.tPack, "table.pack or function(...) return {n=select('#',...),...} end"],
+            [n.tUnpack, "table.unpack or unpack"],
+            [n.bTcreate, "table.create or function(s,v) local t={} for i=1,s do t[i]=v end return t end"],
             [n.bTconcat, "table.concat"], [n.bMfloor, "math.floor"], [n.bIpairs, "ipairs"],
             [n.bTostring, "tostring"], [n.bRawget, "rawget"], [n.bSetmeta, "setmetatable"],
-            [n.bBxor, "bit32.bxor"], [n.bBand, "bit32.band"],
+            [n.bBxor, "(bit32 and bit32.bxor) or (bit and bit.bxor) or function(a,b) a=a%4294967296;b=b%4294967296;local p,c=1,0 while a>0 or b>0 do local ra,rb=a%2,b%2 if ra~=rb then c=c+p end a,b,p=(a-ra)/2,(b-rb)/2,p*2 end return c end"],
+            [n.bBand, "(bit32 and bit32.band) or (bit and bit.band) or function(a,b) a=a%4294967296;b=b%4294967296;local p,c=1,0 while a>0 and b>0 do local ra,rb=a%2,b%2 if ra==1 and rb==1 then c=c+p end a,b,p=(a-ra)/2,(b-rb)/2,p*2 end return c end"],
+            [n.bLsh, "(bit32 and bit32.lshift) or (bit and bit.lshift) or function(a,s) s=s%32 return ((a%(2^(32-s)))*(2^s))%4294967296 end"],
+            [n.bRsh, "(bit32 and bit32.rshift) or (bit and bit.rshift) or function(a,s) s=s%32 return math.floor((a%4294967296)/(2^s))%4294967296 end"],
+            [n.bSbyte, "string.byte"], [n.bSchar, "string.char"],
+            [n.bBcr, "(type(buffer)=='table' and buffer.create) or nil"],
+            [n.bBlen, "(type(buffer)=='table' and buffer.len) or nil"],
+            [n.bBr8, "(type(buffer)=='table' and buffer.readu8) or nil"],
+            [n.bBw8, "(type(buffer)=='table' and buffer.writeu8) or nil"],
+            [n.bBcp, "(type(buffer)=='table' and buffer.copy) or nil"],
+            [n.bBfs, "(type(buffer)=='table' and buffer.fromstring) or nil"],
             [n.bGetmeta, "getmetatable"], [n.bNext, "next"],
         ];
         const fullLines = captures.map(([v, g]) => `local ${v}=${g}`);
         const assignLines = captures.map(([v, g]) => `${v}=${g}`);
+        const fnvFull = `local ${n.fnv}=function(_s) local _h=2166136261 for _i=1,#_s do _h=${n.bBxor}(_h,${n.bSbyte}(_s,_i));_h=(_h*403+${n.bBand}(_h,255)*16777216)%4294967296 end return _h end`;
+        const fnvAssign = `${n.fnv}=function(_s) local _h=2166136261 for _i=1,#_s do _h=${n.bBxor}(_h,${n.bSbyte}(_s,_i));_h=(_h*403+${n.bBand}(_h,255)*16777216)%4294967296 end return _h end`;
         const check = `local _hookOk=true`;
-        return { code: [...fullLines, check].join("\n"), assignOnly: [...assignLines, check].join("\n") };
+        return { code: [...fullLines, fnvFull, check].join("\n"), assignOnly: [...assignLines, fnvAssign, check].join("\n") };
     }
     const scVar = randomName(3);
-    const geVar = randomName(3);
     const encName = (s) => {
         const codes = Array.from(s).map(c => {
             const code = c.charCodeAt(0);
@@ -960,7 +1189,12 @@ function buildBuiltinCaptures(ctx) {
         [n.tPack, "table", "pack"], [n.tUnpack, "table", "unpack"],
         [n.bTcreate, "table", "create"], [n.bTconcat, "table", "concat"],
         [n.bMfloor, "math", "floor"],
+        [n.bSbyte, "string", "byte"], [n.bSchar, "string", "char"],
         [n.bBxor, "bit32", "bxor"], [n.bBand, "bit32", "band"],
+        [n.bLsh, "bit32", "lshift"], [n.bRsh, "bit32", "rshift"],
+        [n.bBcr, "buffer", "create"], [n.bBlen, "buffer", "len"],
+        [n.bBr8, "buffer", "readu8"], [n.bBw8, "buffer", "writeu8"],
+        [n.bBcp, "buffer", "copy"], [n.bBfs, "buffer", "fromstring"],
     ];
     const libs = new Map();
     for (const [varName, lib, member] of libCaptures) {
@@ -971,14 +1205,18 @@ function buildBuiltinCaptures(ctx) {
     const lines = [];
     lines.push(`do`);
     lines.push(`local ${scVar}=("")[${luaEsc("char")}]`);
-    lines.push(`local ${geVar}=(getgenv and getgenv()) or (type(getfenv)=="function" and getfenv(0)) or _G or {}`);
+    lines.push(`local _fe=(type(getfenv)=="function" and (getfenv(0) or getfenv())) or {}`);
+    lines.push(`local _ge=(type(getgenv)=="function" and getgenv()) or {}`);
+    lines.push(`local _re=(type(getrenv)=="function" and getrenv()) or {}`);
+    lines.push(`local _gl=(type(_G)=="table" and _G) or {}`);
+    lines.push(`local function _fnd(k) return _fe[k] or _gl[k] or _ge[k] or _re[k] end`);
     const shuffledSimple = [...simpleCaptures];
     for (let i = shuffledSimple.length - 1; i > 0; i--) {
         const j = Math.floor(rng() * (i + 1));
         [shuffledSimple[i], shuffledSimple[j]] = [shuffledSimple[j], shuffledSimple[i]];
     }
     for (const [varName, globalName] of shuffledSimple) {
-        lines.push(`${varName}=${geVar}[${encName(globalName)}]`);
+        lines.push(`${varName}=_fnd(${encName(globalName)}) or ${globalName}`);
     }
     const libKeys = [...libs.keys()];
     for (let i = libKeys.length - 1; i > 0; i--) {
@@ -987,112 +1225,166 @@ function buildBuiltinCaptures(ctx) {
     }
     for (const libName of libKeys) {
         const { libVar, members } = libs.get(libName);
-        lines.push(`local ${libVar}=${geVar}[${encName(libName)}]`);
+        let fallbackLib = `(${libName} or {})`;
+        if (libName === "bit32")
+            fallbackLib = "(bit32 or bit or {})";
+        else if (libName === "buffer")
+            fallbackLib = "(type(buffer)=='table' and buffer or {})";
+        lines.push(`local ${libVar}=_fnd(${encName(libName)}) or ${fallbackLib}`);
         for (const [varName, memberName] of members) {
-            lines.push(`${varName}=${libVar}[${encName(memberName)}]`);
+            if (libName === "buffer") {
+                lines.push(`${varName}=(${n.bType}(${libVar})=="table" and ${libVar}[${encName(memberName)}]) or nil`);
+                continue;
+            }
+            let polyfill = `${libName}.${memberName}`;
+            if (libName === "bit32") {
+                if (memberName === "bxor") {
+                    polyfill = `(bit32 and bit32.bxor) or (bit and bit.bxor) or function(a,b) a=a%4294967296;b=b%4294967296;local p,c=1,0 while a>0 or b>0 do local ra,rb=a%2,b%2 if ra~=rb then c=c+p end a,b,p=(a-ra)/2,(b-rb)/2,p*2 end return c end`;
+                } else if (memberName === "band") {
+                    polyfill = `(bit32 and bit32.band) or (bit and bit.band) or function(a,b) a=a%4294967296;b=b%4294967296;local p,c=1,0 while a>0 and b>0 do local ra,rb=a%2,b%2 if ra==1 and rb==1 then c=c+p end a,b,p=(a-ra)/2,(b-rb)/2,p*2 end return c end`;
+                } else if (memberName === "lshift") {
+                    polyfill = `(bit32 and bit32.lshift) or (bit and bit.lshift) or function(a,s) s=s%32 return ((a%(2^(32-s)))*(2^s))%4294967296 end`;
+                } else if (memberName === "rshift") {
+                    polyfill = `(bit32 and bit32.rshift) or (bit and bit.rshift) or function(a,s) s=s%32 return math.floor((a%4294967296)/(2^s))%4294967296 end`;
+                }
+            } else if (libName === "table" && memberName === "create") {
+                polyfill = `table.create or function(s,v) local t={} for i=1,s do t[i]=v end return t end`;
+            } else if (libName === "table" && memberName === "pack") {
+                polyfill = `table.pack or function(...) return {n=select("#",...),...} end`;
+            } else if (libName === "table" && memberName === "unpack") {
+                polyfill = `table.unpack or unpack`;
+            }
+            lines.push(`${varName}=(${libVar} and ${libVar}[${encName(memberName)}]) or ${polyfill}`);
         }
     }
     lines.push(`end`);
-    const nHg = randomName(3);
-    const checks = [
-        `${n.bType}(1)=="number"`, `${n.bType}("")=="string"`,
-        `${n.bSelect}("#",1,2,3)==3`,
-        `${n.bPcall}(function() end)`,
-        `${n.bXpcall}(function() return 1 end,function() end)`,
-        `${n.bBxor}(0,0)==0`, `${n.bBand}(255,15)==15`,
-        `${n.tPack}(1,2,3).n==3`,
-        `${n.bSelect}("#",${n.tUnpack}({7,8}))==2`,
-        `${n.bType}(${n.bTcreate}(0))=="table"`,
-        `${n.bTconcat}({"a","b"})=="ab"`,
-        `${n.bMfloor}(1.9)==1`,
-        `${n.bTostring}(42)=="42"`,
-        `${n.bRawget}({x=1},"x")==1`,
-        `${n.bType}(${n.bSetmeta})=="function"`,
-        `${n.bType}(${n.bIpairs})=="function"`,
-        `${n.bType}(${n.bGetmeta})=="function"`,
+    lines.push(`${n.fnv}=function(_s) local _h=2166136261 for _i=1,#_s do _h=${n.bBxor}(_h,${n.bSbyte}(_s,_i));_h=(_h*403+${n.bBand}(_h,255)*16777216)%4294967296 end return _h end`);
+
+    const nSecState = randomName(3);
+    const nSecDelta = randomName(3);
+    ctx.secDeltaVar = nSecDelta;
+    ctx.secStateVar = nSecState;
+
+    const initialSeed = 0x1337 + Math.floor(rng() * 0x7FFF);
+    let expectedSeed = initialSeed;
+
+    const spyNames = [
+        "SimpleSpy", "Hydroxide", "RemoteSpy", "TurtleSpy",
+        "OriginalNamecall", "SimpleSpyExecuted", "HydroxideExecuted",
+        "SigmaSpy", "OctoSpy"
     ];
-    for (let ci = checks.length - 1; ci > 0; ci--) {
+    const spyHashEntries = spyNames.map(s => `[0x${fnv1a32(s).toString(16)}]=true`).join(",");
+    const trapHashEntries = ["__DEBUG_HOOK", "__SPY_ATTACHED", "SimpleSpyExecuted", "HydroxideExecuted"]
+        .map(s => `[0x${fnv1a32(s).toString(16)}]=true`).join(",");
+
+    const securityItems = [
+        // Algebraic Invariant
+        {
+            cond: `${n.bPcall}(function() local _x=math.floor(math.abs(-42));assert((_x*(_x+1))%2==0) end)`,
+            weight: 0x17 + Math.floor(rng() * 50)
+        },
+        // Bitwise Invariant
+        {
+            cond: `${n.bBand}(${n.bBxor}(0xAA,0x55),0xFF)==0xFF and ${n.bBand}(255,15)==15`,
+            weight: 0x23 + Math.floor(rng() * 50)
+        },
+        // Roblox DataModel & Userdata Intrinsic
+        {
+            cond: `${n.bPcall}(function() if game~=nil then assert(type(game)=="userdata" and game.ClassName=="DataModel") end;if workspace~=nil then assert(type(workspace)=="userdata" and workspace.ClassName=="Workspace") end end)`,
+            weight: 0x31 + Math.floor(rng() * 50)
+        },
+        // Metatable Proxy Invariant
+        {
+            cond: `${n.bPcall}(function() local _t=${n.bSetmeta}({},{__index=function() return 77 end});assert(_t[1]==77) end)`,
+            weight: 0x47 + Math.floor(rng() * 50)
+        },
+        // Anti-spoofed debug.info on fresh local closure (safe across wrapped executor builtins)
+        {
+            cond: `${n.bPcall}(function() if debug and debug.info then local _d=function() end;local ok,src=${n.bPcall}(debug.info,_d,"s");if ok then assert(src~="[C]") end end end)`,
+            weight: 0x6B + Math.floor(rng() * 50)
+        },
+        // FNV-1a Hashed Anti-Spy Registry Guard (zero plaintext spy names, no islclosure false positives)
+        {
+            cond: `${n.bPcall}(function() local _sp={${spyHashEntries}};local _g=(type(getgenv)=="function" and getgenv()) or (type(_G)=="table" and not (table.isfrozen and table.isfrozen(_G)) and _G);if _g then for _k,_v in ${n.bNext},_g do if _v and ${n.bType}(_k)=="string" and _sp[${n.fnv}(_k)] then error(1) end end end end)`,
+            weight: 0x7F + Math.floor(rng() * 50)
+        },
+        // MBA Opaque Invariant: (x ^ y) + 2*(x & y) == x + y (Algebraic Arithmetic Invariant)
+        {
+            cond: `(function() local _x=${Math.floor(rng() * 0x7FFF) + 1};local _y=${Math.floor(rng() * 0x7FFF) + 1};return (${n.bBxor}(_x,_y)+2*${n.bBand}(_x,_y))==(_x+_y) end)()`,
+            weight: 0x8A + Math.floor(rng() * 40)
+        },
+        // MBA Opaque Invariant: (x ^ y) == (x | y) - (x & y)
+        {
+            cond: `(function() local _x=${Math.floor(rng() * 0x7FFF) + 1};local _y=${Math.floor(rng() * 0x7FFF) + 1};local _bor=function(a,b) return a+b-${n.bBand}(a,b) end;return ${n.bBxor}(_x,_y)==(_bor(_x,_y)-${n.bBand}(_x,_y)) end)()`,
+            weight: 0x93 + Math.floor(rng() * 40)
+        }
+    ];
+
+    for (let ci = securityItems.length - 1; ci > 0; ci--) {
         const cj = Math.floor(rng() * (ci + 1));
-        [checks[ci], checks[cj]] = [checks[cj], checks[ci]];
+        [securityItems[ci], securityItems[cj]] = [securityItems[cj], securityItems[ci]];
     }
-    checks.push(`${n.bPcall}(function() return (debug and debug.info and debug.info(${n.bPcall},"s")~="[C]") and false or true end)`);
-    checks.push(`${n.bPcall}(function() local _g=(getgenv and getgenv()) or _G; return not (_g and (_g.SimpleSpy or _g.Hydroxide or _g.RemoteSpy or _g.TurtleSpy)) end)`);
-    checks.push(`${n.bPcall}(function() local _t=setmetatable({},{__index=function() return 77 end});return _t[1]==77 end)`);
-    const check = `local ${nHg}=${checks.join(" and ")}`;
-    const corrupt = process.env.NO_SEC === '1'
-        ? `do end`
-        : `if not ${nHg} then ${n.bTcreate}=function() return {} end;${n.tPack}=function(...) return {n=0} end;${n.bPcall}=function() return false end;${n.bSelect}=function() return 0 end;${n.bMfloor}=function(x) return x end end`;
-    const captureCode = [...lines, check, corrupt].join("\n");
-    return { code: captureCode, assignOnly: captureCode };
+
+    for (const item of securityItems) {
+        const mixed = ((expectedSeed * 31 + item.weight) & 0xFFFF) ^ (item.weight * 7);
+        expectedSeed = mixed & 0xFFFF;
+    }
+
+    // Dynamic Keying: Target PlaceId or Universal Runtime Invariant (Anti-Offline Poisoning)
+    const targetPlaceId = Number(ctx.targetPlaceId || 0);
+    const hasPlaceLock = targetPlaceId > 0;
+
+    // Per-build randomized 16-bit dynamic salt (No static hardcoded values)
+    const universalSalt = Math.floor(rng() * 0xDE00) + 0x1100;
+    const saltShareA = Math.floor(rng() * 0x7E00) + 0x1000;
+    const saltShareB = (universalSalt ^ saltShareA) & 0xFFFF;
+
+    const expectedDynSalt = hasPlaceLock
+        ? (targetPlaceId & 0xFFFF)
+        : universalSalt;
+
+    expectedSeed = ((expectedSeed * 31 + expectedDynSalt) & 0xFFFF) ^ ((expectedDynSalt * 7) & 0xFFFF);
+
+    const secLines = [
+        `${nSecState}=${initialSeed}`
+    ];
+    for (const item of securityItems) {
+        secLines.push(`if ${item.cond} then local _m=${n.bBand}((${nSecState}*31+${item.weight}),0xFFFF);${nSecState}=${n.bBand}(${n.bBxor}(_m,${item.weight * 7}),0xFFFF) end`);
+    }
+
+    if (hasPlaceLock) {
+        secLines.push(`local _dynSalt=0;${n.bPcall}(function() if game~=nil and ${n.bType}(game)=="userdata" and game.ClassName=="DataModel" and game.PlaceId then _dynSalt=${n.bBand}(game.PlaceId,0xFFFF) end end);local _m=${n.bBand}((${nSecState}*31+_dynSalt),0xFFFF);${nSecState}=${n.bBand}(${n.bBxor}(_m,${n.bBand}(_dynSalt*7,0xFFFF)),0xFFFF)`);
+    } else {
+        secLines.push(`local _dynSalt=0;${n.bPcall}(function() if game~=nil and ${n.bType}(game)=="userdata" and game.ClassName=="DataModel" then local _rs=game:GetService("RunService");if _rs and ${n.bType}(_rs)=="userdata" then _dynSalt=${n.bBxor}(${saltShareA},${saltShareB}) end end end);local _m=${n.bBand}((${nSecState}*31+_dynSalt),0xFFFF);${nSecState}=${n.bBand}(${n.bBxor}(_m,${n.bBand}(_dynSalt*7,0xFFFF)),0xFFFF)`);
+    }
+
+    // Silent Desynchronization Sentinel (The Ghost Trap, FNV-1a Hashed)
+    secLines.push(`local _ghostTrap=false;${n.bPcall}(function() if debug and debug.gethook and debug.gethook()~=nil then _ghostTrap=true end;local _th={${trapHashEntries}};local _g=(type(getgenv)=="function" and getgenv()) or (type(_G)=="table" and _G);if _g then for _k,_v in ${n.bNext},_g do if _v and ${n.bType}(_k)=="string" and _th[${n.fnv}(_k)] then _ghostTrap=true;break end end end end);if _ghostTrap then ${nSecState}=${n.bBxor}(${nSecState},1) end`);
+
+    secLines.push(`${nSecDelta}=${n.bBxor}(${nSecState},${expectedSeed})`);
+
+    const fullCode = [...lines, `local ${nSecState}`, `local ${nSecDelta}`, ...secLines].join("\n");
+    const assignCode = [...lines, ...secLines].join("\n");
+    return { code: fullCode, assignOnly: assignCode, secDeltaVar: nSecDelta, secStateVar: nSecState };
 }
 function buildVMRuntime(ctx, assignStyle = false) {
     const n = ctx.names;
     const { pK, pC, pP, pU, pN } = ctx.protoKeys;
-    const L = [];
-    L.push(assignStyle
-        ? `${n.run}=function(${n.K},${n.code},${n.protos},${n.upvalues},${n.nParams},${n.maxRegs},_isVararg,${n.env},...)`
-        : `local function ${n.run}(${n.K},${n.code},${n.protos},${n.upvalues},${n.nParams},${n.maxRegs},_isVararg,${n.env},...)`);
-    L.push(`${n.protos}=${n.protos} or {}`);
-    L.push(`${n.upvalues}=${n.upvalues} or {}`);
-    L.push(`local ${n.R}=${n.bTcreate}(${n.maxRegs}+1)`);
-    L.push(`local _args={...}`);
-    L.push(`local _ac=${n.bSelect}("#",...)`);
-    L.push(`for _i=1,((_ac<${n.nParams}) and _ac or ${n.nParams}) do ${n.R}[_i]=_args[_i] end`);
-    L.push(`local ${n.varargs}={}`);
-    L.push(`local ${n.vaCount}=0`);
-    L.push(`if _isVararg then ${n.vaCount}=_ac-${n.nParams};if ${n.vaCount}<0 then ${n.vaCount}=0 end;for _i=1,${n.vaCount} do ${n.varargs}[_i]=_args[${n.nParams}+_i] end end`);
-    if (ctx.level !== "debug") {
-        L.push(`do local _c={};for _ci=1,#${n.code} do _c[_ci]=${n.code}[_ci] end;${n.code}=_c end`);
-    }
-    L.push(`local ${n.ip}=1`);
-    L.push(`local ${n.openUVs}={}`);
-    L.push(`local ${n.ic}={}`);
-    L.push(`local ${n.top}=0`);
-    const nTwVm = ctx.level !== "debug" ? randomName(2) : "_tw";
-    L.push(`local ${nTwVm};do local _t=${n.env}["task"];if _t then ${nTwVm}=_t["wait"] end end`);
+    const bodies = buildHandlerBodies(n, ctx, ctx.usedOps);
     let rkThreshVar = '';
     let rkSubVar = '';
     if (ctx.level !== "debug") {
         rkThreshVar = randomName(3);
         rkSubVar = randomName(3);
-        const rkVariant = Math.floor(rng() * 6);
-        const a = Math.floor(rng() * 200) + 10;
-        const b = RK_OFFSET - a;
-        if (rkVariant === 0) {
-            L.push(`local ${rkThreshVar}=${a}+${b}`);
-        }
-        else if (rkVariant === 1) {
-            L.push(`local ${rkThreshVar}=${n.bBxor}(${RK_OFFSET ^ (a)},${a})`);
-        }
-        else if (rkVariant === 2) {
-            const shift = Math.floor(rng() * 3) + 1;
-            L.push(`local ${rkThreshVar}=${RK_OFFSET >> shift}*${1 << shift}`);
-        }
-        else if (rkVariant === 3) {
-            const rndMul = 1 + Math.floor(rng() * 100);
-            L.push(`local ${rkThreshVar}=${n.bBand}(${RK_OFFSET + rndMul * 0x200},${0x1FF})`);
-        }
-        else if (rkVariant === 4) {
-            const m = [2, 4, 8, 16, 32, 64][Math.floor(rng() * 6)];
-            L.push(`local ${rkThreshVar}=${RK_OFFSET / m}*${m}`);
-        }
-        else {
-            L.push(`local ${rkThreshVar}=${n.bBand}(${RK_OFFSET | (Math.floor(rng() * 256) << 16)},0xFFFF)`);
-        }
-        L.push(`local ${rkSubVar}=${rkThreshVar}-1`);
-        L.push(`local function ${n.RK}(x) if x>=${rkThreshVar} then return ${n.K}[x-${rkSubVar}] else return ${n.R}[x+1] end end`);
-    }
-    else {
-        L.push(`local function ${n.RK}(x) if x>=${RK_OFFSET} then return ${n.K}[x-${RK_OFFSET - 1}] else return ${n.R}[x+1] end end`);
-    }
-    const bodies = buildHandlerBodies(n, ctx, ctx.usedOps);
-    if (rkThreshVar) {
         const hotRawOps = [
             10 /* RegOp.ADD */, 11 /* RegOp.SUB */, 12 /* RegOp.MUL */,
             13 /* RegOp.DIV */, 14 /* RegOp.MOD */, 15 /* RegOp.POW */,
             16 /* RegOp.IDIV */,
         ];
-        const hotShuffled = new Set(hotRawOps.map(op => ctx.opcodeEncode[op]));
+        const hotShuffled = new Set([
+            ...hotRawOps.map(op => ctx.opcodeEncode[op]),
+            ...(ctx.opcodeAlt ? hotRawOps.map(op => ctx.opcodeAlt[op]).filter(x => x !== undefined) : [])
+        ]);
         const rkEsc = n.RK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const rkRe = new RegExp(rkEsc + '\\(([A-Z])\\)', 'g');
         for (const [sOp, body] of bodies) {
@@ -1103,6 +1395,179 @@ function buildVMRuntime(ctx, assignStyle = false) {
             }
         }
     }
+
+    const sortedOps = Array.from(bodies.keys()).sort((a, b) => a - b);
+    const validOps = sortedOps.filter(sOp => bodies.get(sOp).trim() !== '');
+
+    // Prepare Nested 2-Layer CFF State Machine configuration (for non-debug builds)
+    const tagMask = (ctx.tagMask || 0) & 0xFF;
+    const usedStateIds = new Set();
+    const allocStateId = () => {
+        let id;
+        do {
+            id = 0x1000 + Math.floor(rng() * 0xEE00);
+        } while (usedStateIds.has(id));
+        usedStateIds.add(id);
+        return id;
+    };
+    const exitOuterId = allocStateId();
+    const trapOuterId = allocStateId();
+    const decoyOuterIds = [allocStateId(), allocStateId(), allocStateId()];
+    const outerBuckets = [];
+    if (ctx.level !== "debug" && validOps.length > 0) {
+        const shuffledValid = [...validOps];
+        for (let i = shuffledValid.length - 1; i > 0; i--) {
+            const j = Math.floor(rng() * (i + 1));
+            [shuffledValid[i], shuffledValid[j]] = [shuffledValid[j], shuffledValid[i]];
+        }
+        const nBuckets = Math.max(1, Math.min(shuffledValid.length, 4 + Math.floor(rng() * 3)));
+        const hotOps = new Set();
+        for (const rop of [1, 4, 5, 7, 8, 10, 11, 12, 13, 14, 15, 16, 21, 22, 23, 24, 25, 26, 27, 30, 31, 36]) {
+            if (ctx.opcodeEncode[rop] !== undefined)
+                hotOps.add(ctx.opcodeEncode[rop]);
+            if (ctx.opcodeAlt && ctx.opcodeAlt[rop] !== undefined)
+                hotOps.add(ctx.opcodeAlt[rop]);
+        }
+        for (let b = 0; b < nBuckets; b++) {
+            outerBuckets.push({
+                outerId: allocStateId(),
+                hopId: null,
+                iMask: 1 + Math.floor(rng() * 255),
+                iBias: 256 + Math.floor(rng() * 60000),
+                ops: []
+            });
+        }
+        for (let i = 0; i < shuffledValid.length; i++) {
+            outerBuckets[i % nBuckets].ops.push(shuffledValid[i]);
+        }
+        for (const bkt of outerBuckets) {
+            const hasHot = bkt.ops.some(sOp => hotOps.has(sOp));
+            if (!hasHot && rng() > 0.35) {
+                bkt.hopId = allocStateId();
+            }
+        }
+    }
+
+    const L = [];
+    const declPfx = assignStyle ? '' : 'local ';
+    L.push(`${declPfx}${n.wLut}={[0]=0,1,2,4}`);
+    L.push(`${declPfx}${n.shCache}={}`);
+    L.push(`${declPfx}${n.pk}=function(_p) local _pl=${n.bBand}(_p,255);local _ph=${n.bBand}(${n.bRsh}(_p,8),255);return ${n.bBand}(${ctx.rotSeed}+_pl*${ctx.rotStep}+_pl*_pl*${ctx.rotStep2}+_ph*${ctx.rotStep3},255) end`);
+    const roVar = assignStyle ? randomName(3) : '_ro';
+    L.push(`do local _hb=(${n.bBcr}~=nil and ${n.bBlen}~=nil and ${n.bBr8}~=nil and ${n.bBw8}~=nil and ${n.bBcp}~=nil);` +
+        `${n.rb}=_hb and ${n.bBr8} or function(_t,_i) return _t[_i+1] end;` +
+        `${n.wb}=_hb and ${n.bBw8} or function(_t,_i,_v) _t[_i+1]=_v end;` +
+        `${n.cp}=_hb and ${n.bBcp} or function(_d,_dp,_s,_sp,_l) for _k=0,_l-1 do _d[_dp+_k+1]=_s[_sp+_k+1] end end;` +
+        `local function ${roVar}(_sh,_b,_p,_o,_w,_isR,_rk) ` +
+        `if _w==0 then return 0,_o ` +
+        `elseif _w==1 then return (_isR and ${n.bBxor}(${n.rb}(_b,_p+_o),_rk[_o+1]) or ${n.bBxor}(${n.rb}(_sh,_p+_o),${n.pk}(_p+_o))),_o+1 ` +
+        `elseif _w==2 then local _b0,_b1;if _isR then _b0=${n.bBxor}(${n.rb}(_b,_p+_o),_rk[_o+1]);_b1=${n.bBxor}(${n.rb}(_b,_p+_o+1),_rk[_o+2]) else _b0=${n.bBxor}(${n.rb}(_sh,_p+_o),${n.pk}(_p+_o));_b1=${n.bBxor}(${n.rb}(_sh,_p+_o+1),${n.pk}(_p+_o+1)) end;local _u=_b0+_b1*256;if _u>=32768 then _u=_u-65536 end;return _u,_o+2 ` +
+        `else local _b0,_b1,_b2,_b3;if _isR then _b0=${n.bBxor}(${n.rb}(_b,_p+_o),_rk[_o+1]);_b1=${n.bBxor}(${n.rb}(_b,_p+_o+1),_rk[_o+2]);_b2=${n.bBxor}(${n.rb}(_b,_p+_o+2),_rk[_o+3]);_b3=${n.bBxor}(${n.rb}(_b,_p+_o+3),_rk[_o+4]) else _b0=${n.bBxor}(${n.rb}(_sh,_p+_o),${n.pk}(_p+_o));_b1=${n.bBxor}(${n.rb}(_sh,_p+_o+1),${n.pk}(_p+_o+1));_b2=${n.bBxor}(${n.rb}(_sh,_p+_o+2),${n.pk}(_p+_o+2));_b3=${n.bBxor}(${n.rb}(_sh,_p+_o+3),${n.pk}(_p+_o+3)) end;local _u=_b0+_b1*256+_b2*65536+_b3*16777216;if _u>=2147483648 then _u=_u-4294967296 end;return _u,_o+4 end end;` +
+        `${n.dec}=function(_sh,_b,_p,_isR,_rk) local _op,_tg;if _isR then _op=${n.bBxor}(${n.rb}(_b,_p),_rk[1]);_tg=${n.bBxor}(${n.bBxor}(${n.rb}(_b,_p+1),_rk[2]),${tagMask}) else _op=${n.bBxor}(${n.rb}(_sh,_p),${n.pk}(_p));_tg=${n.bBxor}(${n.bBxor}(${n.rb}(_sh,_p+1),${n.pk}(_p+1)),${tagMask}) end;local _o=2;local _s1,_s2,_s3;_s1,_o=${roVar}(_sh,_b,_p,_o,${n.bBand}(_tg,3),_isR,_rk);_s2,_o=${roVar}(_sh,_b,_p,_o,${n.bBand}(${n.bRsh}(_tg,2),3),_isR,_rk);_s3,_o=${roVar}(_sh,_b,_p,_o,${n.bBand}(${n.bRsh}(_tg,4),3),_isR,_rk);return _op,_s1,_s2,_s3,_o end;` +
+        `${n.adv}=function(_ip1,_sh) local _tg=${n.bBxor}(${n.bBxor}(${n.rb}(_sh,_ip1),${n.pk}(_ip1)),${tagMask});return _ip1+2+${n.wLut}[${n.bBand}(_tg,3)]+${n.wLut}[${n.bBand}(${n.bRsh}(_tg,2),3)]+${n.wLut}[${n.bBand}(${n.bRsh}(_tg,4),3)] end end`);
+    if (ctx.level !== "debug") {
+        const oMapEntries = [];
+        for (const bkt of outerBuckets) {
+            for (const sOp of bkt.ops) {
+                oMapEntries.push(`[${sOp}]=${bkt.outerId}`);
+            }
+        }
+        L.push(`${declPfx}${n.oMap}={${oMapEntries.join(",")}}`);
+    } else {
+        L.push(`${declPfx}${n.oMap}={}`);
+    }
+
+    L.push(assignStyle
+        ? `${n.run}=function(${n.K},${n.code},${n.protos},${n.upvalues},${n.nParams},${n.maxRegs},_isVararg,${n.env},...)`
+        : `local function ${n.run}(${n.K},${n.code},${n.protos},${n.upvalues},${n.nParams},${n.maxRegs},_isVararg,${n.env},...)`);
+    if (ctx.encodeStrings && ctx.singleDecVar) {
+        const rawKVar = randomName(3);
+        L.push(`local ${rawKVar}=${n.K};local ${n.K}=${n.bSetmeta}({},{__index=function(_,i) local r=${rawKVar}[i];if ${n.bType}(r)=="table" then return ${ctx.singleDecVar}(r,i) end;return r end,__newindex=function() end,__metatable=false})`);
+    }
+    L.push(`${n.protos}=${n.protos} or {}`);
+    L.push(`${n.upvalues}=${n.upvalues} or {}`);
+    L.push(`local ${n.R}=${n.bTcreate}(${n.maxRegs}+1)`);
+    L.push(`local _args={...}`);
+    L.push(`local _ac=${n.bSelect}("#",...)`);
+    L.push(`for _i=1,((_ac<${n.nParams}) and _ac or ${n.nParams}) do ${n.R}[_i]=_args[_i] end`);
+    L.push(`local ${n.varargs}={}`);
+    L.push(`local ${n.vaCount}=0`);
+    L.push(`if _isVararg then ${n.vaCount}=_ac-${n.nParams};if ${n.vaCount}<0 then ${n.vaCount}=0 end;for _i=1,${n.vaCount} do ${n.varargs}[_i]=_args[${n.nParams}+_i] end end`);
+
+    const xsSeed = (0x10000000 + Math.floor(rng() * 0x6FFFFFFF)) >>> 0;
+    const deadOp = ctx.deadOp ?? 254;
+    const xsVar = randomName(3);
+    const scrAddrVar = randomName(3);
+    const scrLenVar = randomName(3);
+    const rkArrVar = randomName(3);
+    const curPVar = randomName(3);
+    const isRollVar = randomName(3);
+    const curLenVar = randomName(3);
+    const invVar = randomName(3);
+    const cLenVar = randomName(3);
+    const wiVar = randomName(3);
+    const npVar = randomName(3);
+    const ntgVar = randomName(3);
+    const nlVar = randomName(3);
+    const cwVar = randomName(3);
+    const jxVar = randomName(3);
+    const jmVar = randomName(3);
+    const kmVar = randomName(3);
+
+    L.push(`local ${cLenVar}=#${n.code}`);
+    L.push(`local ${n.shVar}=${n.shCache}[${n.code}]`);
+    L.push(`local ${n.bBufVar}`);
+    L.push(`if ${n.bBcr}~=nil and ${n.bBlen}~=nil and ${n.bBr8}~=nil and ${n.bBw8}~=nil and ${n.bBcp}~=nil then ` +
+        `if not ${n.shVar} then if ${n.bBfs} then ${n.shVar}=${n.bBfs}(${n.code}) else ${n.shVar}=${n.bBcr}(${cLenVar});for _ci=1,${cLenVar} do ${n.bBw8}(${n.shVar},_ci-1,${n.bSbyte}(${n.code},_ci)) end end;${n.shCache}[${n.code}]=${n.shVar} end;` +
+        `${n.bBufVar}=${n.bBcr}(${cLenVar});${n.bBcp}(${n.bBufVar},0,${n.shVar},0,${cLenVar}) ` +
+        `else ` +
+        `if not ${n.shVar} then ${n.shVar}=${n.bTcreate}(${cLenVar});for _ci=1,${cLenVar} do ${n.shVar}[_ci]=${n.bSbyte}(${n.code},_ci) end;${n.shCache}[${n.code}]=${n.shVar} end;` +
+        `${n.bBufVar}=${n.bTcreate}(${cLenVar});for _ci=1,${cLenVar} do ${n.bBufVar}[_ci]=${n.shVar}[_ci] end end`);
+    L.push(`local ${n.deadOpVar}=${deadOp}`);
+    L.push(`local ${n.hasScrVar}=false`);
+    if (ctx.level !== "debug") {
+        L.push(`local ${xsVar}=${xsSeed}`);
+        L.push(`local ${scrAddrVar}=-1`);
+        L.push(`local ${scrLenVar}=0`);
+        L.push(`local ${rkArrVar}=${n.bTcreate}(14);for _ri=1,14 do ${rkArrVar}[_ri]=0 end`);
+        L.push(`local ${invVar}=${17 + Math.floor(rng() * 80)}`);
+    }
+
+    L.push(`local ${n.ip}=1`);
+    L.push(`local ${n.openUVs}={}`);
+    L.push(`local ${n.ic}={}`);
+    L.push(`local ${n.top}=0`);
+    const nTwVm = ctx.level !== "debug" ? randomName(2) : "_tw";
+    L.push(`local ${nTwVm};do local _t=${n.env}["task"];if _t then ${nTwVm}=_t["wait"] end end`);
+
+    if (ctx.level !== "debug") {
+        const rkVariant = Math.floor(rng() * 6);
+        const a = Math.floor(rng() * 200) + 10;
+        const b = RK_OFFSET - a;
+        if (rkVariant === 0) {
+            L.push(`local ${rkThreshVar}=${a}+${b}`);
+        } else if (rkVariant === 1) {
+            L.push(`local ${rkThreshVar}=(${n.bBxor} and ${n.bBxor}(${RK_OFFSET ^ a},${a})) or ${RK_OFFSET}`);
+        } else if (rkVariant === 2) {
+            const shift = Math.floor(rng() * 3) + 1;
+            L.push(`local ${rkThreshVar}=${RK_OFFSET >> shift}*${1 << shift}`);
+        } else if (rkVariant === 3) {
+            const rndMul = 1 + Math.floor(rng() * 100);
+            const rkPow2 = 1 << Math.ceil(Math.log2(RK_OFFSET + 1));
+            const rkMask = rkPow2 - 1;
+            L.push(`local ${rkThreshVar}=(${n.bBand} and ${n.bBand}(${RK_OFFSET + rndMul * rkPow2},0x${rkMask.toString(16).toUpperCase()})) or ${RK_OFFSET}`);
+        } else if (rkVariant === 4) {
+            const m = [2, 4, 8, 16, 32, 64][Math.floor(rng() * 6)];
+            L.push(`local ${rkThreshVar}=${RK_OFFSET / m}*${m}`);
+        } else {
+            L.push(`local ${rkThreshVar}=(${n.bBand} and ${n.bBand}(${RK_OFFSET | (Math.floor(rng() * 256) << 16)},0xFFFF)) or ${RK_OFFSET}`);
+        }
+        L.push(`local ${rkSubVar}=${rkThreshVar}-1`);
+        L.push(`local function ${n.RK}(x) if x>=${rkThreshVar} then return ${n.K}[x-${rkSubVar}] else return ${n.R}[x+1] end end`);
+    } else {
+        L.push(`local function ${n.RK}(x) if x>=${RK_OFFSET} then return ${n.K}[x-${RK_OFFSET - 1}] else return ${n.R}[x+1] end end`);
+    }
+
     if (ctx.debugTrace) {
         const entries = REG_OP_NAMES.map((name, realOp) => {
             const shuffled = ctx.opcodeEncode[realOp];
@@ -1110,15 +1575,11 @@ function buildVMRuntime(ctx, assignStyle = false) {
         }).join(",");
         L.push(`local _opNames={${entries}}`);
     }
+
     const doMut = ctx.level !== "debug";
-    const mtVar = doMut ? randomName(3) : "";
-    const mutStep = doMut ? (1 + Math.floor(rng() * 254)) : 0;
-    const mutMul = doMut ? (1 + Math.floor(rng() * 126)) * 2 + 1 : 1;
+    let opqVar = '';
     if (doMut) {
-        L.push(`local ${mtVar}={}`);
-    }
-    if (doMut) {
-        const opqVar = randomName(3);
+        opqVar = randomName(3);
         const opqA = 2 + Math.floor(rng() * 100);
         const opqB = 2 + Math.floor(rng() * 100);
         const opqC = 2 + Math.floor(rng() * 100);
@@ -1130,149 +1591,120 @@ function buildVMRuntime(ctx, assignStyle = false) {
             L.push(`local ${mbaV1}=${n.bBand}(${opqA},${opqB})`);
             L.push(`local ${mbaV2}=${n.bBand}(${n.bBxor}(${opqA},0xFFFFFFFF),${opqB})`);
             L.push(`local ${opqVar}=${mbaV1}+${mbaV2}==${n.bBand}(${opqB},0xFFFFFFFF)`);
-        }
-        else if (opqVariant === 1) {
+        } else if (opqVariant === 1) {
             L.push(`local ${mbaV1}=2*${n.bBand}(${opqA},${opqB})+${n.bBxor}(${opqA},${opqB})`);
             L.push(`local ${opqVar}=${mbaV1}==${opqA}+${opqB}`);
-        }
-        else if (opqVariant === 2) {
+        } else if (opqVariant === 2) {
             L.push(`local ${mbaV1}=${n.bBxor}(${n.bBxor}(${opqA},${opqB}),${opqB})`);
             L.push(`local ${mbaV2}=${n.bBxor}(${n.bBxor}(${mbaV1},${opqC}),${opqC})`);
             L.push(`local ${opqVar}=${mbaV2}==${n.bBand}(${opqA},0xFFFFFFFF)`);
-        }
-        else if (opqVariant === 3) {
+        } else if (opqVariant === 3) {
             L.push(`local ${mbaV1}=${n.bBxor}(${n.bBxor}(${opqA},0xFFFFFFFF),0xFFFFFFFF)`);
             L.push(`local ${mbaV2}=${n.bBand}(${n.bBxor}(${mbaV1},${opqB}),${n.bBxor}(${mbaV1},${opqB}))`);
             L.push(`local ${opqVar}=${mbaV2}==${n.bBxor}(${opqA},${opqB})`);
-        }
-        else if (opqVariant === 4) {
+        } else if (opqVariant === 4) {
             L.push(`local ${mbaV1}=2*${n.bBand}(${opqA},${opqB})+${n.bBxor}(${opqA},${opqB})`);
             L.push(`local ${mbaV2}=${n.bBxor}(${n.bBxor}(${n.bBand}(${mbaV1},0xFFFF),${opqC}),${opqC})`);
             L.push(`local ${opqVar}=${mbaV2}==${n.bBand}(${opqA}+${opqB},0xFFFF)`);
-        }
-        else if (opqVariant === 5) {
+        } else if (opqVariant === 5) {
             L.push(`local ${mbaV1}=${n.bBxor}(${n.bBand}(${n.bBxor}(${opqA},0xFFFFFFFF),${n.bBxor}(${opqB},0xFFFFFFFF)),0xFFFFFFFF)`);
             L.push(`local ${mbaV2}=${n.bBxor}(${opqA},${n.bBand}(${n.bBxor}(${opqA},0xFFFFFFFF),${opqB}))`);
             L.push(`local ${opqVar}=${mbaV1}==${mbaV2}`);
-        }
-        else if (opqVariant === 6) {
+        } else if (opqVariant === 6) {
             L.push(`local ${mbaV1}=${n.bBxor}(${opqA},${opqB})`);
             L.push(`local ${mbaV2}=${n.bBand}(${mbaV1},${mbaV1})`);
             L.push(`local ${mbaV3}=2*${n.bBand}(${mbaV2},${opqC})+${n.bBxor}(${mbaV2},${opqC})`);
             L.push(`local ${opqVar}=${mbaV3}==${mbaV1}+${opqC}`);
-        }
-        else if (opqVariant === 7) {
+        } else if (opqVariant === 7) {
             L.push(`local ${mbaV1}=${n.bBxor}(${opqA},${n.bBand}(${opqA},${opqB}))`);
             L.push(`local ${mbaV2}=${n.bBand}(${opqA},${n.bBxor}(${opqB},0xFFFFFFFF))`);
             L.push(`local ${opqVar}=${mbaV1}==${mbaV2}`);
-        }
-        else if (opqVariant === 8) {
+        } else if (opqVariant === 8) {
             L.push(`local ${mbaV1}=${n.bBand}(${opqA},${opqB})`);
             L.push(`local ${mbaV2}=${n.bBxor}(${opqA},${n.bBand}(${n.bBxor}(${opqA},0xFFFFFFFF),${mbaV1}))`);
             L.push(`local ${opqVar}=${mbaV2}==${n.bBand}(${opqA},0xFFFFFFFF)`);
-        }
-        else if (opqVariant === 9) {
+        } else if (opqVariant === 9) {
             L.push(`local ${mbaV1}=2*${n.bBand}(${opqA},${opqB})+${n.bBxor}(${opqA},${opqB})`);
             L.push(`local ${mbaV2}=2*${n.bBand}(${mbaV1},${opqC})+${n.bBxor}(${mbaV1},${opqC})`);
             L.push(`local ${opqVar}=${n.bBand}(${mbaV2},0xFFFF)==${n.bBand}(${opqA}+${opqB}+${opqC},0xFFFF)`);
-        }
-        else if (opqVariant === 10) {
+        } else if (opqVariant === 10) {
             L.push(`local ${mbaV1}=${n.bBxor}(${opqA},${opqB})`);
             L.push(`local ${mbaV2}=${opqA}+${opqB}-2*${n.bBand}(${opqA},${opqB})`);
             L.push(`local ${opqVar}=${n.bBand}(${mbaV1},0xFFFF)==${n.bBand}(${mbaV2},0xFFFF)`);
-        }
-        else if (opqVariant === 11) {
+        } else if (opqVariant === 11) {
             L.push(`local ${mbaV1}=${n.bBand}(${opqA},${opqB})`);
             L.push(`local ${mbaV2}=${n.bBand}(${mbaV1},${opqC})`);
             L.push(`local ${mbaV3}=${n.bBand}(${opqA},${n.bBand}(${opqB},${opqC}))`);
             L.push(`local ${opqVar}=${mbaV2}==${mbaV3}`);
-        }
-        else if (opqVariant === 12) {
+        } else if (opqVariant === 12) {
             L.push(`local ${mbaV1}=${n.bBand}(${n.bBxor}(${opqA},${opqB}),${opqA})`);
             L.push(`local ${mbaV2}=${n.bBand}(${opqA},${n.bBxor}(${opqB},0xFFFFFFFF))`);
             L.push(`local ${mbaV3}=2*${n.bBand}(${mbaV1},${opqC})+${n.bBxor}(${mbaV1},${opqC})`);
             L.push(`local ${opqVar}=${mbaV3}==2*${n.bBand}(${mbaV2},${opqC})+${n.bBxor}(${mbaV2},${opqC})`);
-        }
-        else if (opqVariant === 13) {
+        } else if (opqVariant === 13) {
             L.push(`local ${mbaV1}=${n.bBxor}(${n.bBxor}(${opqA},${opqB}),${opqC})`);
             L.push(`local ${mbaV2}=${n.bBxor}(${n.bBxor}(${mbaV1},${opqC}),${opqB})`);
             L.push(`local ${opqVar}=${mbaV2}==${n.bBand}(${opqA},0xFFFFFFFF)`);
-        }
-        else if (opqVariant === 14) {
+        } else if (opqVariant === 14) {
             L.push(`local ${mbaV1}=${n.bBand}(${opqA},${n.bBxor}(${opqB},${opqC}))`);
             L.push(`local ${mbaV2}=${n.bBxor}(${n.bBand}(${opqA},${opqB}),${n.bBand}(${opqA},${opqC}))`);
             L.push(`local ${opqVar}=${mbaV1}==${mbaV2}`);
-        }
-        else {
+        } else {
             L.push(`local ${mbaV1}=${n.bBand}(${opqA},${opqB})+${n.bBand}(${n.bBxor}(${opqA},0xFFFFFFFF),${opqB})`);
             L.push(`local ${mbaV2}=${n.bBand}(${opqA},${n.bBxor}(${opqB},0xFFFFFFFF))+${n.bBand}(${n.bBxor}(${opqA},0xFFFFFFFF),${n.bBxor}(${opqB},0xFFFFFFFF))`);
             L.push(`local ${opqVar}=${mbaV1}+${mbaV2}==0xFFFFFFFF`);
         }
-        L.push(`if not ${opqVar} then ${n.R}={};${n.code}={};${n.ip}=#${n.code}+1 end`);
+        L.push(`if not ${opqVar} then ${n.R}=${n.bTcreate}(0);${cLenVar}=0;${n.ip}=1 end`);
     }
-    const preWhileIdx = L.length;
-    L.push(`while ${n.ip}<=#${n.code} do`);
-    const useRot = ctx.rotSeed > 0;
+
     const opVar = randomName(2);
-    if (doMut) {
-        const mkVar = randomName(2);
-        L.push(`local ${mkVar}=${mtVar}[${n.ip}] or 0`);
-        if (useRot) {
-            const rkVar = randomName(3);
-            L.push(`local ${rkVar}=${n.bBand}(${ctx.rotSeed}+${n.ip}*${ctx.rotStep}+${n.ip}*${n.ip}*${ctx.rotStep2},0xFF)`);
-            L.push(`local ${opVar}=${n.bBxor}(${n.code}[${n.ip}],${rkVar},${mkVar})`);
-        }
-        else {
-            L.push(`local ${opVar}=${n.bBxor}(${n.code}[${n.ip}],${mkVar})`);
-        }
-        L.push(`local ${n.s1}=${n.code}[${n.ip}+1]`);
-        L.push(`local ${n.s2}=${n.code}[${n.ip}+2]`);
-        L.push(`local ${n.s3}=${n.code}[${n.ip}+3]`);
-        const nkVar = randomName(2);
-        const xkVar = randomName(2);
-        L.push(`local ${nkVar}=${n.bBand}(${mkVar}*${mutMul}+${opVar}+${mutStep},0xFF)`);
-        L.push(`local ${xkVar}=${n.bBxor}(${mkVar},${nkVar})`);
-        L.push(`${n.code}[${n.ip}]=${n.bBxor}(${n.code}[${n.ip}],${xkVar})`);
-        L.push(`${mtVar}[${n.ip}]=${nkVar}`);
+    L.push(`while ${n.ip}<=${cLenVar} do`);
+    if (ctx.level !== "debug") {
+        L.push(`local ${curPVar}=${n.ip}-1`);
+        L.push(`local ${isRollVar}=(${n.hasScrVar} and ${curPVar}==${scrAddrVar})`);
+        L.push(`if ${n.hasScrVar} and not ${isRollVar} then ${n.cp}(${n.bBufVar},${scrAddrVar},${n.shVar},${scrAddrVar},${scrLenVar});${n.hasScrVar}=false end`);
+        L.push(`local ${opVar},${n.s1},${n.s2},${n.s3},${curLenVar}=${n.dec}(${n.shVar},${n.bBufVar},${curPVar},${isRollVar},${rkArrVar})`);
+        L.push(`${n.ip}=${n.ip}+${curLenVar}`);
+        L.push(`for ${wiVar}=0,${curLenVar}-1 do ${n.wb}(${n.bBufVar},${curPVar}+${wiVar},${n.deadOpVar}) end`);
+        // Rolling Xorshift32 encryption over NEXT sequential instruction in working buffer
+        L.push(`do local ${npVar}=${n.ip}-1;if ${npVar}+1<${cLenVar} then ` +
+            `local ${ntgVar}=${n.bBxor}(${n.bBxor}(${n.rb}(${n.shVar},${npVar}+1),${n.pk}(${npVar}+1)),${tagMask});` +
+            `local ${nlVar}=2+${n.wLut}[${n.bBand}(${ntgVar},3)]+${n.wLut}[${n.bBand}(${n.bRsh}(${ntgVar},2),3)]+${n.wLut}[${n.bBand}(${n.bRsh}(${ntgVar},4),3)];` +
+            `if ${npVar}+${nlVar}<=${cLenVar} then local ${cwVar}=${xsVar};` +
+            `for ${jxVar}=1,${nlVar} do local ${jmVar}=(${jxVar}-1)%4;if ${jmVar}==0 then ` +
+            `${xsVar}=${n.bBxor}(${xsVar},${n.bBand}(${n.bLsh}(${xsVar},13),0xFFFFFFFF));` +
+            `${xsVar}=${n.bBxor}(${xsVar},${n.bRsh}(${xsVar},17));` +
+            `${xsVar}=${n.bBxor}(${xsVar},${n.bBand}(${n.bLsh}(${xsVar},5),0xFFFFFFFF));` +
+            `${cwVar}=${xsVar} end;` +
+            `local ${kmVar}=${n.bBand}(${n.bRsh}(${cwVar},${jmVar}*8),0xFF);` +
+            `${rkArrVar}[${jxVar}]=${kmVar};` +
+            `${n.wb}(${n.bBufVar},${npVar}+${jxVar}-1,${n.bBxor}(${n.bBxor}(${n.rb}(${n.shVar},${npVar}+${jxVar}-1),${n.pk}(${npVar}+${jxVar}-1)),${kmVar})) end;` +
+            `${scrAddrVar}=${npVar};${scrLenVar}=${nlVar};${n.hasScrVar}=true ` +
+            `else ${n.hasScrVar}=false end else ${n.hasScrVar}=false end end`);
+    } else {
+        L.push(`local ${curPVar}=${n.ip}-1`);
+        L.push(`local ${opVar},${n.s1},${n.s2},${n.s3},${curLenVar}=${n.dec}(${n.shVar},${n.bBufVar},${curPVar},false,nil)`);
+        L.push(`${n.ip}=${n.ip}+${curLenVar}`);
     }
-    else {
-        if (useRot) {
-            const rkVar = randomName(3);
-            L.push(`local ${rkVar}=${n.bBand}(${ctx.rotSeed}+${n.ip}*${ctx.rotStep}+${n.ip}*${n.ip}*${ctx.rotStep2},0xFF)`);
-            L.push(`local ${opVar}=${n.bBxor}(${n.code}[${n.ip}],${rkVar})`);
-        }
-        else {
-            L.push(`local ${opVar}=${n.code}[${n.ip}]`);
-        }
-        L.push(`local ${n.s1}=${n.code}[${n.ip}+1]`);
-        L.push(`local ${n.s2}=${n.code}[${n.ip}+2]`);
-        L.push(`local ${n.s3}=${n.code}[${n.ip}+3]`);
-    }
-    L.push(`${n.ip}=${n.ip}+4`);
+
     if (doMut) {
         L.push(`if ${n.ip}%${60000 + Math.floor(rng() * 40001)}<4 and ${nTwVm} then ${nTwVm}() end`);
     }
     if (doMut && process.env.NO_SEC !== '1') {
         const secInterval = 500 + Math.floor(rng() * 1500);
         const secVar = randomName(3);
-        const secCheckVariant = Math.floor(rng() * 3);
-        if (secCheckVariant === 0 || secCheckVariant === 1) {
-            L.push(`if ${n.ip}%${secInterval * 4}<4 then local ${secVar}=${n.bPcall}(function() return ${n.env}["game"] end);if ${secVar} and ${n.bType}(${n.env}["game"])~="userdata" and ${n.bType}(${n.env}["game"])~="table" then ${n.R}=${n.bTcreate}(0);${n.ip}=#${n.code}+1 end end`);
-        }
-        else {
-            L.push(`if ${n.ip}%${secInterval * 4}<4 then local ${secVar},_sv=${n.bPcall}(function() return (${n.env}["workspace"] or (${n.env}["game"] and ${n.env}["game"].GetService and ${n.env}["game"]:GetService("Workspace"))) end);if not ${secVar} then ${n.R}=${n.bTcreate}(0);${n.ip}=#${n.code}+1 end end`);
+        const secCheckVariant = Math.floor(rng() * 2);
+        if (secCheckVariant === 0) {
+            L.push(`if ${n.ip}%${secInterval * 4}<4 then local ${secVar}=${n.env}["game"];if ${secVar}~=nil and ${n.bType}(${secVar})~="userdata" and ${n.bType}(${secVar})~="table" then ${n.R}=${n.bTcreate}(0);${n.ip}=${cLenVar}+1 end end`);
+        } else {
+            L.push(`if ${n.ip}%${secInterval * 4}<4 then local ${secVar}=${n.env}["workspace"];if ${secVar}~=nil and ${n.bType}(${secVar})~="userdata" and ${n.bType}(${secVar})~="table" then ${n.R}=${n.bTcreate}(0);${n.ip}=${cLenVar}+1 end end`);
         }
     }
     if (ctx.debugTrace) {
-        L.push(`print("[VM] ip="..(${n.ip}-4).." "..((_opNames and _opNames[${opVar}]) or "OP"..${opVar}).." s1="..tostring(${n.s1}).." s2="..tostring(${n.s2}).." s3="..tostring(${n.s3}))`);
+        L.push(`print("[VM] p="..(${curPVar}).." "..((_opNames and _opNames[${opVar}]) or "OP"..${opVar}).." s1="..tostring(${n.s1}).." s2="..tostring(${n.s2}).." s3="..tostring(${n.s3}))`);
     }
-    const sortedOps = Array.from(bodies.keys()).sort((a, b) => a - b);
-    const validOps = sortedOps.filter(sOp => {
-        const body = bodies.get(sOp);
-        return body.trim() !== '';
-    });
-    const dv = ctx.dispatchVariant;
-    if (dv === 0) {
+
+    if (ctx.level === "debug" || outerBuckets.length === 0) {
         let isFirst = true;
         for (const sOp of validOps) {
             const body = bodies.get(sOp);
@@ -1282,159 +1714,90 @@ function buildVMRuntime(ctx, assignStyle = false) {
         }
         if (!isFirst)
             L.push(`end`);
-    }
-    else if (dv === 1) {
-        const mask = ctx.dispatchMask;
-        const mVar = randomName(3);
-        L.push(`local ${mVar}=${n.bBxor}(${opVar},${mask})`);
-        const shuffled = [...validOps];
-        for (let i = shuffled.length - 1; i > 0; i--) {
-            const j = Math.floor(rng() * (i + 1));
-            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-        }
-        let isFirst = true;
-        for (const sOp of shuffled) {
-            const body = bodies.get(sOp);
-            const maskedOp = sOp ^ mask;
-            const prefix = isFirst ? 'if' : 'elseif';
-            L.push(`${prefix} ${mVar}==${maskedOp} then ${body}`);
-            isFirst = false;
-        }
-        if (!isFirst)
-            L.push(`end`);
-    }
-    else if (dv === 2) {
-        const emitBinaryTree = (ops, depth) => {
-            if (ops.length === 0)
-                return;
-            if (ops.length <= 3 || depth >= 4) {
-                let isF = true;
-                for (const sOp of ops) {
-                    const body = bodies.get(sOp);
-                    const pre = isF ? 'if' : 'elseif';
-                    L.push(`${pre} ${opVar}==${sOp} then ${body}`);
-                    isF = false;
-                }
-                if (!isF)
-                    L.push(`end`);
-                return;
-            }
-            const splitIdx = Math.max(1, Math.min(ops.length - 1, Math.floor(ops.length * (0.3 + rng() * 0.4))));
-            const left = ops.slice(0, splitIdx);
-            const right = ops.slice(splitIdx);
-            const pivot = right[0];
-            L.push(`if ${opVar}<${pivot} then`);
-            emitBinaryTree(left, depth + 1);
-            L.push(`else`);
-            emitBinaryTree(right, depth + 1);
-            L.push(`end`);
-        };
-        emitBinaryTree(validOps, 0);
-    }
-    else if (dv === 3) {
-        const nGroups = 3 + Math.floor(rng() * 3);
-        const mask = ctx.dispatchMask;
-        const groups = new Map();
-        for (const sOp of validOps) {
-            const g = (sOp ^ mask) % nGroups;
-            if (!groups.has(g))
-                groups.set(g, []);
-            groups.get(g).push(sOp);
-        }
-        const gVar = randomName(3);
-        L.push(`local ${gVar}=${n.bBxor}(${opVar},${mask})%${nGroups}`);
-        const gKeys = [...groups.keys()];
-        for (let i = gKeys.length - 1; i > 0; i--) {
-            const j = Math.floor(rng() * (i + 1));
-            [gKeys[i], gKeys[j]] = [gKeys[j], gKeys[i]];
-        }
-        let isFirstG = true;
-        for (const gIdx of gKeys) {
-            const gOps = groups.get(gIdx);
-            const prefG = isFirstG ? 'if' : 'elseif';
-            L.push(`${prefG} ${gVar}==${gIdx} then`);
-            const innerOps = [...gOps];
-            for (let i = innerOps.length - 1; i > 0; i--) {
+    } else {
+        // Multi-Layered Nested CFF State Machine (Outer State Bucket + Inner Dispatcher + MBA Opaque Predicates)
+        const oStVar = randomName(3);
+        const secCoupling = ctx.secDeltaVar ? `,(${ctx.secDeltaVar} or 0)` : `,0`;
+        L.push(`local ${oStVar}=${n.bBxor}((${n.oMap}[${opVar}] or ${trapOuterId})${secCoupling})`);
+        L.push(`while ${oStVar}~=${exitOuterId} do`);
+
+        const outerBranches = [];
+        for (const bkt of outerBuckets) {
+            const innerEntries = bkt.ops.map(sOp => ({
+                sel: ((sOp ^ bkt.iMask) + bkt.iBias) & 0xFFFF,
+                body: bodies.get(sOp),
+                isDecoy: false,
+            }));
+            const usedSels = new Set(innerEntries.map(e => e.sel));
+            let decoySel;
+            do {
+                decoySel = 256 + Math.floor(rng() * 64000);
+            } while (usedSels.has(decoySel));
+            innerEntries.push({ sel: decoySel, body: `${n.R}=${n.bTcreate}(0);break`, isDecoy: true });
+            for (let i = innerEntries.length - 1; i > 0; i--) {
                 const j = Math.floor(rng() * (i + 1));
-                [innerOps[i], innerOps[j]] = [innerOps[j], innerOps[i]];
+                [innerEntries[i], innerEntries[j]] = [innerEntries[j], innerEntries[i]];
             }
-            let isF = true;
-            for (const sOp of innerOps) {
-                const body = bodies.get(sOp);
-                const pre = isF ? 'if' : 'elseif';
-                L.push(`${pre} ${opVar}==${sOp} then ${body}`);
-                isF = false;
+            const nextOuter = bkt.hopId || exitOuterId;
+            const bLines = [];
+            const iStVar = randomName(3);
+            const oNxVar = randomName(3);
+            const innerSecTerm = ctx.secDeltaVar ? `${n.bBxor}(${opVar},${bkt.iMask}),(${ctx.secDeltaVar} or 0)` : `${opVar},${bkt.iMask}`;
+            bLines.push(`local ${iStVar}=${n.bBand}(${n.bBxor}(${innerSecTerm})+${bkt.iBias},0xFFFF);local ${oNxVar}=${n.bBxor}(${oStVar},${bkt.outerId ^ nextOuter})`);
+            for (let k = 0; k < innerEntries.length; k++) {
+                const ent = innerEntries[k];
+                const kw = k === 0 ? 'if' : 'elseif';
+                if (ent.isDecoy) {
+                    bLines.push(`${kw} ${iStVar}==${ent.sel} and (${opqVar} and ((${invVar}*(${invVar}+1))%2==1)) then ${ent.body}`);
+                } else {
+                    bLines.push(`${kw} ${iStVar}==${ent.sel} then ${ent.body}`);
+                }
             }
-            if (!isF)
-                L.push(`end`);
-            isFirstG = false;
+            bLines.push(`end;${oStVar}=${oNxVar}`);
+            outerBranches.push({ id: bkt.outerId, isDecoy: false, code: bLines.join("\n") });
+
+            if (bkt.hopId) {
+                outerBranches.push({
+                    id: bkt.hopId,
+                    isDecoy: false,
+                    code: `if ${opqVar} then ${oStVar}=${n.bBxor}(${oStVar},${bkt.hopId ^ exitOuterId}) else ${n.R}=${n.bTcreate}(0);${oStVar}=${exitOuterId} end`
+                });
+            }
         }
-        if (!isFirstG)
-            L.push(`end`);
-    }
-    else if (dv === 4 || dv === 5) {
-        const hTbl = n.handlers;
-        const retOp = ctx.opcodeEncode[29 /* RegOp.RETURN */];
-        const tcOp = ctx.opcodeEncode[28 /* RegOp.TAILCALL */];
-        const mandatoryFast = [
-            21 /* RegOp.JMP */, 31 /* RegOp.FORLOOP */, 27 /* RegOp.CALL */,
-            4 /* RegOp.MOVE */, 30 /* RegOp.FORPREP */,
-        ].map(op => ctx.opcodeEncode[op]);
-        const optCandidates = [
-            1 /* RegOp.LOADK */, 5 /* RegOp.GETGLOBAL */,
-            7 /* RegOp.GETTABLE */, 3 /* RegOp.LOADBOOL */,
-            8 /* RegOp.SETTABLE */, 2 /* RegOp.LOADNIL */,
-        ];
-        const shuffledCands = [...optCandidates];
-        for (let i = shuffledCands.length - 1; i > 0; i--) {
+
+        for (const did of decoyOuterIds) {
+            outerBranches.push({
+                id: did,
+                isDecoy: true,
+                code: `${n.R}=${n.bTcreate}(0);${oStVar}=${exitOuterId}`
+            });
+        }
+        outerBranches.push({
+            id: trapOuterId,
+            isDecoy: false,
+            code: `${oStVar}=${exitOuterId}`
+        });
+
+        for (let i = outerBranches.length - 1; i > 0; i--) {
             const j = Math.floor(rng() * (i + 1));
-            [shuffledCands[i], shuffledCands[j]] = [shuffledCands[j], shuffledCands[i]];
+            [outerBranches[i], outerBranches[j]] = [outerBranches[j], outerBranches[i]];
         }
-        const nFast = 2 + Math.floor(rng() * 2);
-        const fastSet = new Set([
-            ...mandatoryFast,
-            ...shuffledCands.slice(0, nFast).map(op => ctx.opcodeEncode[op]),
-        ]);
-        const inlineOps = new Set([retOp, tcOp, ...fastSet]);
-        const tableOps = validOps.filter(sOp => !inlineOps.has(sOp));
-        for (let i = tableOps.length - 1; i > 0; i--) {
-            const j = Math.floor(rng() * (i + 1));
-            [tableOps[i], tableOps[j]] = [tableOps[j], tableOps[i]];
+
+        for (let bi = 0; bi < outerBranches.length; bi++) {
+            const br = outerBranches[bi];
+            const kw = bi === 0 ? 'if' : 'elseif';
+            const cond = br.isDecoy
+                ? `${oStVar}==${br.id} and (${opqVar} and ((${invVar}*(${invVar}+1))%2==1))`
+                : `${oStVar}==${br.id}`;
+            L.push(`${kw} ${cond} then`);
+            L.push(br.code);
         }
-        const tblMask = dv === 5 ? ctx.dispatchMask : 0;
-        void tblMask;
-        const fastArr = [...fastSet];
-        for (let i = fastArr.length - 1; i > 0; i--) {
-            const j = Math.floor(rng() * (i + 1));
-            [fastArr[i], fastArr[j]] = [fastArr[j], fastArr[i]];
-        }
-        let isFirst = true;
-        for (const fOp of fastArr) {
-            const body = bodies.get(fOp);
-            if (!body || body.trim() === '')
-                continue;
-            const prefix = isFirst ? 'if' : 'elseif';
-            L.push(`${prefix} ${opVar}==${fOp} then ${body}`);
-            isFirst = false;
-        }
-        const hVar = randomName(2);
-        void hVar;
-        for (const sOp of tableOps) {
-            const body = bodies.get(sOp);
-            if (body.trim() === '')
-                continue;
-            const cmpVal = sOp ^ tblMask;
-            const cmpExpr = tblMask
-                ? `${n.bBxor}(${opVar},${tblMask})==${cmpVal}`
-                : `${opVar}==${sOp}`;
-            const prefix = isFirst ? 'if' : 'elseif';
-            L.push(`${prefix} ${cmpExpr} then ${body}`);
-            isFirst = false;
-        }
-        L.push(`elseif ${opVar}==${retOp} then ${bodies.get(retOp) || ''}`);
-        L.push(`elseif ${opVar}==${tcOp} then ${bodies.get(tcOp) || ''}`);
+        L.push(ctx.secDeltaVar
+            ? `else if (${ctx.secDeltaVar} or 0)~=0 then ${n.R}=${n.bTcreate}(0);${n.ip}=${cLenVar}+1 end;${oStVar}=${exitOuterId} end`
+            : `else ${oStVar}=${exitOuterId} end`);
         L.push(`end`);
     }
+
     L.push(`end`);
     L.push(`end`);
     return L.join("\n");
@@ -1464,7 +1827,7 @@ const EXECUTOR_GLOBALS = [
     "iscclosure", "islclosure", "isexecutorclosure", "checkclosure", "isourclosure",
     "checkcaller",
     "getconnections", "firesignal", "fireclickdetector", "fireproximityprompt", "firetouchinterest",
-    "getgc", "getinstances", "getnilinstances", "getscripts", "getrunningscripts",
+    "getgc", "filtergc", "getinstances", "getnilinstances", "getscripts", "getrunningscripts",
     "getloadedmodules", "getcallingscript", "getactors",
     "getscriptbytecode", "dumpstring", "getscripthash", "getscriptclosure", "decompile",
     "readfile", "writefile", "appendfile", "loadfile", "listfiles",
@@ -1476,7 +1839,7 @@ const EXECUTOR_GLOBALS = [
     "getnamecallmethod", "setnamecallmethod",
     "isreadonly", "setreadonly",
     "gethiddenproperty", "sethiddenproperty", "isscriptable", "setscriptable",
-    "identifyexecutor", "getexecutorname",
+    "identifyexecutor", "getexecutorname", "gethwid",
     "request", "http_request", "syn", "http", "WebSocket",
     "cache",
     "Drawing", "cleardrawcache", "isrenderobj",
@@ -1485,7 +1848,8 @@ const EXECUTOR_GLOBALS = [
     "mouse1click", "mouse1press", "mouse1release",
     "mouse2click", "mouse2press", "mouse2release",
     "mousemoveabs", "mousemoverel", "mousescroll",
-    "gethui", "getcustomasset", "getcallbackvalue", "messagebox",
+    "gethui", "getcustomasset", "getsynasset", "getcallbackvalue", "messagebox",
+    "replicatesignal", "restorefunction", "isfunctionhooked",
     "isrbxactive", "isgameactive", "setfpscap",
     "getregistry", "getreg", "getstack",
     "rconsoleclear", "rconsolecreate", "rconsoledestroy",
@@ -1493,7 +1857,6 @@ const EXECUTOR_GLOBALS = [
     "consoleclear", "consolecreate", "consoledestroy",
     "consoleinput", "consoleprint", "consolesettitle",
     "run_on_actor", "runonactor",
-    "getstack",
 ];
 function buildEnvSetup(ctx) {
     const n = ctx.names;
@@ -1516,9 +1879,9 @@ function buildEnvSetup(ctx) {
         return `{${bytes.join(",")}}`;
     };
     const dec = randomName(4);
-    L.push(`local function ${dec}(_t) local _s="";for _i=1,#_t do _s=_s..string.char(${n.bBxor}(_t[_i],${n.bBand}(${envKey}+(_i-1)*${envStep},0xFF))) end;return _s end`);
-    L.push(`local ${n.genv}=(type(getgenv)=="function" and getgenv()) or (type(getrenv)=="function" and getrenv()) or (type(getfenv)=="function" and (getfenv(0) or getfenv())) or (type(_G)=="table" and _G) or {}`);
-    L.push(`local ${n.env}=${n.bSetmeta}({},{[${dec}(${encS("__index")})]=function(_,k) if k=="game" then return (type(game)~="nil" and game) or (getgenv and getgenv().game) or (getrenv and getrenv().game) or ${n.genv}["game"] end;if k=="workspace" then return (type(workspace)~="nil" and workspace) or (getgenv and getgenv().workspace) or (getrenv and getrenv().workspace) or ${n.genv}["workspace"] end;if k=="script" then return (type(script)~="nil" and script) or (getgenv and getgenv().script) or ${n.genv}["script"] end;if k=="task" then return (type(task)~="nil" and task) or (getgenv and getgenv().task) or (getrenv and getrenv().task) or ${n.genv}["task"] end;if k=="Instance" then return (type(Instance)~="nil" and Instance) or (getgenv and getgenv().Instance) or (getrenv and getrenv().Instance) or ${n.genv}["Instance"] end;if k=="cloneref" then return (type(cloneref)~="nil" and cloneref) or (getgenv and getgenv().cloneref) or function(x) return x end end;local ok,v=${n.bPcall}(function() return ${n.genv}[k] end);if ok and v~=nil then return v end;if type(getgenv)=="function" then local ok2,v2=${n.bPcall}(function() return getgenv()[k] end);if ok2 and v2~=nil then return v2 end end;if type(getrenv)=="function" then local ok3,v3=${n.bPcall}(function() return getrenv()[k] end);if ok3 and v3~=nil then return v3 end end;return nil end,[${dec}(${encS("__newindex")})]=function(t,k,v) rawset(t,k,v); if type(getgenv)=="function" then ${n.bPcall}(function() getgenv()[k]=v end) end; if type(_G)=="table" then _G[k]=v end end})`);
+    L.push(`local function ${dec}(_t) local _s="";for _i=1,#_t do _s=_s..${n.bSchar}(${n.bBxor}(_t[_i],${n.bBand}(${envKey}+(_i-1)*${envStep},0xFF))) end;return _s end`);
+    L.push(`local ${n.genv}=(type(getfenv)=="function" and (getfenv(0) or getfenv())) or (type(_G)=="table" and _G) or (type(getgenv)=="function" and getgenv()) or (type(getrenv)=="function" and getrenv()) or {}`);
+    L.push(`local ${n.env}=${n.bSetmeta}({},{[${dec}(${encS("__index")})]=function(_,k) if k=="game" then return (type(game)~="nil" and game) or ${n.genv}["game"] or (getgenv and getgenv().game) or (getrenv and getrenv().game) end;if k=="workspace" then return (type(workspace)~="nil" and workspace) or ${n.genv}["workspace"] or (getgenv and getgenv().workspace) or (getrenv and getrenv().workspace) end;if k=="script" then return (type(script)~="nil" and script) or ${n.genv}["script"] or (getgenv and getgenv().script) end;if k=="task" then return (type(task)~="nil" and task) or ${n.genv}["task"] or (getgenv and getgenv().task) or (getrenv and getrenv().task) end;if k=="Instance" then return (type(Instance)~="nil" and Instance) or ${n.genv}["Instance"] or (getgenv and getgenv().Instance) or (getrenv and getrenv().Instance) end;if k=="cloneref" then return (type(cloneref)~="nil" and cloneref) or (getgenv and getgenv().cloneref) or function(x) return x end end;if k=="buffer" then return buffer end;local ok,v=${n.bPcall}(function() return ${n.genv}[k] end);if ok and v~=nil then return v end;if type(_G)=="table" and _G[k]~=nil then return _G[k] end;if type(getgenv)=="function" then local ok2,v2=${n.bPcall}(function() return getgenv()[k] end);if ok2 and v2~=nil then return v2 end end;if type(getrenv)=="function" then local ok3,v3=${n.bPcall}(function() return getrenv()[k] end);if ok3 and v3~=nil then return v3 end end;if k=="math" then return math end;if k=="table" then return table end;if k=="string" then return string end;if k=="bit32" then return bit32 or bit end;if k=="pairs" then return pairs end;if k=="ipairs" then return ipairs end;if k=="next" then return next end;if k=="pcall" then return pcall end;if k=="xpcall" then return xpcall end;if k=="type" then return type end;if k=="typeof" then return (type(typeof)=="function" and typeof) or type end;if k=="select" then return select end;if k=="tostring" then return tostring end;if k=="tonumber" then return tonumber end;if k=="assert" then return assert end;if k=="error" then return error end;if k=="warn" then return warn end;if k=="print" then return print end;if k=="setmetatable" then return setmetatable end;if k=="getmetatable" then return getmetatable end;if k=="rawget" then return rawget end;if k=="rawset" then return rawset end;if k=="Vector3" then return Vector3 end;if k=="CFrame" then return CFrame end;if k=="Color3" then return Color3 end;if k=="UDim2" then return UDim2 end;if k=="Enum" then return Enum end;if k=="TweenInfo" then return TweenInfo end;if k=="tick" then return (type(tick)=="function" and tick) or os.time end;if k=="time" then return (type(time)=="function" and time) or os.clock end;return nil end,[${dec}(${encS("__newindex")})]=function(t,k,v) rawset(t,k,v); if type(getgenv)=="function" then ${n.bPcall}(function() getgenv()[k]=v end) end; if type(_G)=="table" then ${n.bPcall}(function() _G[k]=v end) end end})`);
     const allGlobals = ctx.includeExecutor ? [...CORE_GLOBALS, ...EXECUTOR_GLOBALS] : [...CORE_GLOBALS];
     for (let si = allGlobals.length - 1; si > 0; si--) {
         const sj = Math.floor(rng() * (si + 1));
@@ -1544,11 +1907,14 @@ function buildEnvFragments(ctx) {
         return `{${bytes.join(",")}}`;
     };
     const dec = randomName(4);
-    forwardDecls.push(dec, n.genv, n.env);
-    fragments.push({ code: `${dec}=function(_t) local _s="";for _i=1,#_t do _s=_s..string.char(${n.bBxor}(_t[_i],${n.bBand}(${envKey}+(_i-1)*${envStep},0xFF))) end;return _s end`, layer: 0 });
-    fragments.push({ code: `${n.genv}=(type(getgenv)=="function" and getgenv()) or (type(getrenv)=="function" and getrenv()) or (type(getfenv)=="function" and (getfenv(0) or getfenv())) or (type(_G)=="table" and _G) or {}`, layer: 1 });
-    fragments.push({ code: `${n.env}=${n.bSetmeta}({},{[${dec}(${encS("__index")})]=function(_,k) if k=="game" then return (type(game)~="nil" and game) or (getgenv and getgenv().game) or (getrenv and getrenv().game) or ${n.genv}["game"] end;if k=="workspace" then return (type(workspace)~="nil" and workspace) or (getgenv and getgenv().workspace) or (getrenv and getrenv().workspace) or ${n.genv}["workspace"] end;if k=="script" then return (type(script)~="nil" and script) or (getgenv and getgenv().script) or ${n.genv}["script"] end;if k=="task" then return (type(task)~="nil" and task) or (getgenv and getgenv().task) or (getrenv and getrenv().task) or ${n.genv}["task"] end;if k=="Instance" then return (type(Instance)~="nil" and Instance) or (getgenv and getgenv().Instance) or (getrenv and getrenv().Instance) or ${n.genv}["Instance"] end;if k=="cloneref" then return (type(cloneref)~="nil" and cloneref) or (getgenv and getgenv().cloneref) or function(x) return x end end;local ok,v=${n.bPcall}(function() return ${n.genv}[k] end);if ok and v~=nil then return v end;if type(getgenv)=="function" then local ok2,v2=${n.bPcall}(function() return getgenv()[k] end);if ok2 and v2~=nil then return v2 end end;if type(getrenv)=="function" then local ok3,v3=${n.bPcall}(function() return getrenv()[k] end);if ok3 and v3~=nil then return v3 end end;return nil end,[${dec}(${encS("__newindex")})]=function(t,k,v) rawset(t,k,v); if type(getgenv)=="function" then ${n.bPcall}(function() getgenv()[k]=v end) end; if type(_G)=="table" then _G[k]=v end end})`, layer: 2 });
-    const allGlobals = ctx.includeExecutor ? [...CORE_GLOBALS, ...EXECUTOR_GLOBALS] : [...CORE_GLOBALS];
+    const nFallbackG = randomName(4);
+    forwardDecls.push(dec, nFallbackG, n.genv, n.env);
+    fragments.push({ code: `${nFallbackG}={}`, layer: 0 });
+    fragments.push({ code: `${dec}=function(_t) local _s="";for _i=1,#_t do _s=_s..${n.bSchar}(${n.bBxor}(_t[_i],${n.bBand}(${envKey}+(_i-1)*${envStep},0xFF))) end;return _s end`, layer: 0 });
+    fragments.push({ code: `${n.genv}=(type(getfenv)=="function" and (getfenv(0) or getfenv())) or (type(getgenv)=="function" and getgenv()) or (type(_G)=="table" and not (table.isfrozen and table.isfrozen(_G)) and _G) or (type(getrenv)=="function" and getrenv()) or {}`, layer: 1 });
+    fragments.push({ code: `${n.env}=${n.bSetmeta}({},{[${dec}(${encS("__index")})]=function(_,k) if k=="_G" then local _rg=(type(getgenv)=="function" and getgenv()._G);if type(_rg)=="table" and not (table.isfrozen and table.isfrozen(_rg)) then return _rg end;if type(_G)=="table" and not (table.isfrozen and table.isfrozen(_G)) then return _G end;return ${nFallbackG} end;if k=="_ENV" then return ${n.env} end;if k=="shared" then return (type(shared)=="table" and shared) or (type(getgenv)=="function" and getgenv().shared) or ${nFallbackG} end;if k=="getgenv" then return (type(getgenv)=="function" and getgenv) or function() return (type(_G)=="table" and _G) or ${n.genv} end end;if k=="getrenv" then return (type(getrenv)=="function" and getrenv) or function() return (type(_G)=="table" and _G) or ${n.genv} end end;if k=="getfenv" then return (type(getfenv)=="function" and getfenv) or function() return ${n.env} end end;if k=="setfenv" then return (type(setfenv)=="function" and setfenv) or function() end end;if k=="game" then return (type(game)~="nil" and game) or ${n.genv}["game"] or (getgenv and getgenv().game) or (getrenv and getrenv().game) end;if k=="workspace" then return (type(workspace)~="nil" and workspace) or ${n.genv}["workspace"] or (getgenv and getgenv().workspace) or (getrenv and getrenv().workspace) end;if k=="script" then return (type(script)~="nil" and script) or ${n.genv}["script"] or (getgenv and getgenv().script) end;if k=="task" then return (type(task)~="nil" and task) or ${n.genv}["task"] or (getgenv and getgenv().task) or (getrenv and getrenv().task) end;if k=="Instance" then return (type(Instance)~="nil" and Instance) or ${n.genv}["Instance"] or (getgenv and getgenv().Instance) or (getrenv and getrenv().Instance) end;if k=="cloneref" then return (type(cloneref)~="nil" and cloneref) or (getgenv and getgenv().cloneref) or function(x) return x end end;if k=="buffer" then return buffer end;local ok,v=${n.bPcall}(function() return ${n.genv}[k] end);if ok and v~=nil then return v end;if type(_G)=="table" and _G[k]~=nil then return _G[k] end;if ${nFallbackG}[k]~=nil then return ${nFallbackG}[k] end;if type(getgenv)=="function" then local ok2,v2=${n.bPcall}(function() return getgenv()[k] end);if ok2 and v2~=nil then return v2 end end;if type(getrenv)=="function" then local ok3,v3=${n.bPcall}(function() return getrenv()[k] end);if ok3 and v3~=nil then return v3 end end;if k=="math" then return math end;if k=="table" then return table end;if k=="string" then return string end;if k=="bit32" then return bit32 or bit end;if k=="pairs" then return pairs end;if k=="ipairs" then return ipairs end;if k=="next" then return next end;if k=="pcall" then return pcall end;if k=="xpcall" then return xpcall end;if k=="type" then return type end;if k=="typeof" then return (type(typeof)=="function" and typeof) or type end;if k=="select" then return select end;if k=="tostring" then return tostring end;if k=="tonumber" then return tonumber end;if k=="assert" then return assert end;if k=="error" then return error end;if k=="warn" then return warn end;if k=="print" then return print end;if k=="setmetatable" then return setmetatable end;if k=="getmetatable" then return getmetatable end;if k=="rawget" then return rawget end;if k=="rawset" then return rawset end;if k=="Vector2" then return Vector2 end;if k=="Vector3" then return Vector3 end;if k=="Vector2int16" then return Vector2int16 end;if k=="Vector3int16" then return Vector3int16 end;if k=="Region3int16" then return Region3int16 end;if k=="CFrame" then return CFrame end;if k=="Color3" then return Color3 end;if k=="UDim2" then return UDim2 end;if k=="UDim" then return UDim end;if k=="Enum" then return Enum end;if k=="TweenInfo" then return TweenInfo end;if k=="NumberRange" then return NumberRange end;if k=="ColorSequence" then return ColorSequence end;if k=="ColorSequenceKeypoint" then return ColorSequenceKeypoint end;if k=="NumberSequence" then return NumberSequence end;if k=="NumberSequenceKeypoint" then return NumberSequenceKeypoint end;if k=="Ray" then return Ray end;if k=="Rect" then return Rect end;if k=="Region3" then return Region3 end;if k=="Font" then return Font end;if k=="DateTime" then return DateTime end;if k=="Random" then return Random end;if k=="utf8" then return utf8 end;if k=="RaycastParams" then return RaycastParams end;if k=="OverlapParams" then return OverlapParams end;if k=="PhysicalProperties" then return PhysicalProperties end;if k=="PathWaypoint" then return PathWaypoint end;if k=="FloatCurveKey" then return FloatCurveKey end;if k=="RotationCurveKey" then return RotationCurveKey end;if k=="CatalogSearchParams" then return CatalogSearchParams end;if k=="DockWidgetPluginGuiInfo" then return DockWidgetPluginGuiInfo end;if k=="Axes" then return Axes end;if k=="Faces" then return Faces end;if k=="tick" then return (type(tick)=="function" and tick) or (type(os)=="table" and os.time) end;if k=="time" then return (type(time)=="function" and time) or (type(os)=="table" and os.clock) end;if k=="os" then return os end;if k=="coroutine" then return coroutine end;if k=="debug" then return debug end;if k=="unpack" then return table.unpack or unpack end;local _pe=(type(getfenv)=="function" and (getfenv(0) or getfenv())) or {};if _pe and _pe[k]~=nil then return _pe[k] end;return nil end,[${dec}(${encS("__newindex")})]=function(t,k,v) rawset(t,k,v); ${nFallbackG}[k]=v; if type(getgenv)=="function" then ${n.bPcall}(function() getgenv()[k]=v end) end; if type(_G)=="table" and not (table.isfrozen and table.isfrozen(_G)) then ${n.bPcall}(function() _G[k]=v end) end end})`, layer: 2 });
+    const allGlobals = (ctx.includeExecutor ? [...CORE_GLOBALS, ...EXECUTOR_GLOBALS] : [...CORE_GLOBALS])
+        .filter(g => g !== "_G" && g !== "_ENV");
     for (let si = allGlobals.length - 1; si > 0; si--) {
         const sj = Math.floor(rng() * (si + 1));
         [allGlobals[si], allGlobals[sj]] = [allGlobals[sj], allGlobals[si]];
@@ -1577,166 +1943,49 @@ function buildEnvFragments(ctx) {
     return { fragments, forwardDecls };
 }
 function buildDecoderChain(ctx, dK, dP) {
+    const n = ctx.names;
     const pk = ctx.protoKeys;
     const V = ctx.layerVariants;
     const fragments = [];
     const forwardDecls = [];
-    const nPre = randomName(6);
-    const n5 = randomName(6);
-    const n4 = randomName(6);
-    const n3 = randomName(6);
-    const n2 = randomName(6);
-    const n1 = randomName(6);
-    const nF = randomName(6);
-    const nAll = randomName(6);
-    const nProtos = randomName(6);
-    forwardDecls.push(nPre, n5, n4, n3, n2, n1, nF, nAll, nProtos);
-    const wrapA = (name, inner) => `${name}=function(_0K) for _0i,_0v in ipairs(_0K) do if type(_0v)=="table" then ${inner} end end end`;
+    const nSingleDec = randomName(6);
+    const nInv = randomName(5);
+    const nCharTab = randomName(5);
+    forwardDecls.push(nInv, nCharTab, nSingleDec);
+    ctx.singleDecVar = nSingleDec;
+
     const SP = ctx.spiralPrime, SO = ctx.spiralOffset;
-    if (V[4] === 2) {
-        const lutName = randomName(4);
-        forwardDecls.push(lutName);
-        fragments.push({ code: `${lutName}={};for _0k=0,511 do ${lutName}[_0k]=(_0k*${SP}+${SO})%251 end`, layer: 0 });
-        fragments.push({ code: wrapA(n5, `local _0s=bit32.band(_0i-1,0xFF);for _0j=1,#_0v do _0v[_0j]=bit32.bxor(_0v[_0j],(${lutName}[(_0j-1)%512]+_0s)%251) end`), layer: 1 });
-    }
-    else if (V[4] === 1) {
-        fragments.push({ code: wrapA(n5, `local _0s=bit32.band(_0i-1,0xFF);local _0a=${SO}+_0s;for _0j=1,#_0v do _0v[_0j]=bit32.bxor(_0v[_0j],_0a%251);_0a=_0a+${SP} end`), layer: 0 });
-    }
-    else {
-        fragments.push({ code: wrapA(n5, `local _0s=bit32.band(_0i-1,0xFF);for _0j=1,#_0v do _0v[_0j]=bit32.bxor(_0v[_0j],((_0j-1)*${SP}+${SO}+_0s)%251) end`), layer: 0 });
-    }
     const KA = ctx.checkKeyA, KB = ctx.checkKeyB, SA = ctx.checkStepA, SB = ctx.checkStepB;
-    const checkBodies = [
-        `local _0s=bit32.band(_0i-1,0xFF);for _0j=1,#_0v do local _0h=math.floor((_0j-1)/2);local _0k;if (_0j-1)%2==0 then _0k=bit32.band(${KA}+_0s+_0h*${SA},0xFF) else _0k=bit32.band(${KB}+_0s+_0h*${SB},0xFF) end;_0v[_0j]=bit32.bxor(_0v[_0j],_0k) end`,
-        `local _0s=bit32.band(_0i-1,0xFF);local _0n=#_0v;for _0j=1,_0n,2 do _0v[_0j]=bit32.bxor(_0v[_0j],bit32.band(${KA}+_0s+math.floor((_0j-1)/2)*${SA},0xFF)) end;for _0j=2,_0n,2 do _0v[_0j]=bit32.bxor(_0v[_0j],bit32.band(${KB}+_0s+math.floor((_0j-1)/2)*${SB},0xFF)) end`,
-        `local _0s=bit32.band(_0i-1,0xFF);local _0ea,_0eb=${KA}+_0s,${KB}+_0s;for _0j=1,#_0v do if (_0j-1)%2==0 then _0v[_0j]=bit32.bxor(_0v[_0j],bit32.band(_0ea,0xFF));_0ea=_0ea+${SA} else _0v[_0j]=bit32.bxor(_0v[_0j],bit32.band(_0eb,0xFF));_0eb=_0eb+${SB} end end`,
-    ];
-    fragments.push({ code: wrapA(n4, checkBodies[V[3]]), layer: 0 });
     const CM = ctx.cascadeMul, CK = ctx.cascadeKey;
-    const cascBodies = [
-        `local _0s=bit32.band(_0i-1,0xFF);for _0j=2,#_0v do _0v[_0j]=bit32.bxor(_0v[_0j],bit32.band(_0v[_0j-1]*${CM}+${CK}+_0s,0xFF)) end`,
-        `local _0s=bit32.band(_0i-1,0xFF);local _0p=_0v[1];for _0j=2,#_0v do local _0k=bit32.band(_0p*${CM}+${CK}+_0s,0xFF);_0v[_0j]=bit32.bxor(_0v[_0j],_0k);_0p=_0v[_0j] end`,
-    ];
-    fragments.push({ code: wrapA(n3, cascBodies[V[2] % 2]), layer: 0 });
     const HS = ctx.helixSeed, HM = ctx.helixMul;
-    if (V[1] === 2) {
-        const tblName = randomName(4);
-        fragments.push({ code: wrapA(n2, `local _0s=bit32.band(_0i-1,0xFF);local ${tblName}={};for _0k=1,#_0v do ${tblName}[_0k]=bit32.band(${HS}+_0s+(_0k-1)*${HM},0xFF) end;for _0j=1,#_0v do _0v[_0j]=bit32.band(_0v[_0j]-${tblName}[_0j]+256,0xFF) end`), layer: 0 });
-    }
-    else if (V[1] === 1) {
-        fragments.push({ code: wrapA(n2, `local _0s=bit32.band(_0i-1,0xFF);local _0a=${HS}+_0s;for _0j=1,#_0v do _0v[_0j]=bit32.band(_0v[_0j]-bit32.band(_0a,0xFF)+256,0xFF);_0a=_0a+${HM} end`), layer: 0 });
-    }
-    else {
-        fragments.push({ code: wrapA(n2, `local _0s=bit32.band(_0i-1,0xFF);for _0j=1,#_0v do _0v[_0j]=bit32.band(_0v[_0j]-bit32.band(${HS}+_0s+(_0j-1)*${HM},0xFF)+256,0xFF) end`), layer: 0 });
-    }
     const inv = ctx.sboxInverse;
-    if (V[0] === 0) {
-        fragments.push({ code: `${n1}=function(_0K) local _0inv={${inv.join(",")}} for _0i,_0v in ipairs(_0K) do if type(_0v)=="table" then local _0s=bit32.band(_0i-1,0xFF);for _0j=1,#_0v do _0v[_0j]=bit32.bxor(_0inv[_0v[_0j]+1],bit32.band(_0s+_0j-1,0xFF)) end end end end`, layer: 0 });
-    }
-    else if (V[0] === 1) {
-        const nLo = randomName(3), nHi = randomName(3), nInv = randomName(3);
-        forwardDecls.push(nLo, nHi, nInv);
-        fragments.push({ code: `${nLo}={${inv.slice(0, 128).join(",")}}`, layer: 0 });
-        fragments.push({ code: `${nHi}={${inv.slice(128).join(",")}}`, layer: 0 });
-        fragments.push({ code: `${nInv}={};for _0k=1,128 do ${nInv}[_0k]=${nLo}[_0k] end;for _0k=1,128 do ${nInv}[128+_0k]=${nHi}[_0k] end`, layer: 1 });
-        fragments.push({ code: `${n1}=function(_0K) for _0i,_0v in ipairs(_0K) do if type(_0v)=="table" then local _0s=bit32.band(_0i-1,0xFF);for _0j=1,#_0v do _0v[_0j]=bit32.bxor(${nInv}[_0v[_0j]+1],bit32.band(_0s+_0j-1,0xFF)) end end end end`, layer: 2 });
-    }
-    else {
-        const chunks = [inv.slice(0, 64), inv.slice(64, 128), inv.slice(128, 192), inv.slice(192)];
-        const order = [0, 1, 2, 3];
-        for (let i = 3; i > 0; i--) {
-            const j = Math.floor(rng() * (i + 1));
-            [order[i], order[j]] = [order[j], order[i]];
-        }
-        const cNames = [randomName(3), randomName(3), randomName(3), randomName(3)];
-        const nInv = randomName(3);
-        forwardDecls.push(...cNames, nInv);
-        for (const idx of order) {
-            fragments.push({ code: `${cNames[idx]}={${chunks[idx].join(",")}}`, layer: 0 });
-        }
-        const sboxLutVar = Math.floor(rng() * 3);
-        if (sboxLutVar === 0) {
-            fragments.push({ code: `${nInv}={};for _0k=1,128 do if _0k<=64 then ${nInv}[_0k]=${cNames[0]}[_0k] else ${nInv}[_0k]=${cNames[1]}[_0k-64] end end;for _0k=1,128 do if _0k<=64 then ${nInv}[128+_0k]=${cNames[2]}[_0k] else ${nInv}[192+_0k-64]=${cNames[3]}[_0k-64] end end`, layer: 1 });
-        }
-        else if (sboxLutVar === 1) {
-            const sTbl = randomName(2);
-            fragments.push({ code: `${nInv}={};local ${sTbl}={${cNames.join(',')}};for _0k=0,255 do local _0ci=(_0k>=192 and 4) or (_0k>=128 and 3) or (_0k>=64 and 2) or 1;${nInv}[_0k+1]=${sTbl}[_0ci][_0k-(_0ci-1)*64+1] end`, layer: 1 });
-        }
-        else {
-            fragments.push({ code: `${nInv}={};for _0k=1,64 do ${nInv}[_0k]=${cNames[0]}[_0k] end;for _0k=1,64 do ${nInv}[64+_0k]=${cNames[1]}[_0k] end;for _0k=1,64 do ${nInv}[128+_0k]=${cNames[2]}[_0k] end;for _0k=1,64 do ${nInv}[192+_0k]=${cNames[3]}[_0k] end`, layer: 1 });
-        }
-        fragments.push({ code: `${n1}=function(_0K) for _0i,_0v in ipairs(_0K) do if type(_0v)=="table" then local _0s=bit32.band(_0i-1,0xFF);for _0j=1,#_0v do _0v[_0j]=bit32.bxor(${nInv}[_0v[_0j]+1],bit32.band(_0s+_0j-1,0xFF)) end end end end`, layer: 2 });
-    }
-    fragments.push({ code: `${nPre}=function(_0K) for _0i=1,#_0K do if type(_0K[_0i])=="string" then local _0s=_0K[_0i];local _0t={};for _0j=1,#_0s do _0t[_0j]=string.byte(_0s,_0j) end;_0K[_0i]=_0t end end end`, layer: 0 });
-    if (Math.floor(rng() * 2) === 0) {
-        fragments.push({ code: wrapA(nF, `local _0s="";for _0j=1,#_0v do _0s=_0s..string.char(_0v[_0j]) end;_0K[_0i]=_0s`), layer: 0 });
-    }
-    else {
-        fragments.push({ code: wrapA(nF, `local _0t={};for _0j=1,#_0v do _0t[_0j]=string.char(_0v[_0j]) end;_0K[_0i]=table.concat(_0t)`), layer: 0 });
-    }
-    const junkCount = 3 + Math.floor(rng() * 4);
-    const junkTemplates = [
-        (nm) => wrapA(nm, `for _0j=1,#_0v do _0v[_0j]=bit32.bxor(_0v[_0j],bit32.band(_0j*${1 + Math.floor(rng() * 200)}+${Math.floor(rng() * 200)},0xFF)) end`),
-        (nm) => wrapA(nm, `for _0j=2,#_0v do _0v[_0j]=bit32.band(_0v[_0j]+_0v[_0j-1]*${1 + Math.floor(rng() * 7)}+${Math.floor(rng() * 200)},0xFF) end`),
-        (nm) => wrapA(nm, `local _0a=${Math.floor(rng() * 200)};for _0j=1,#_0v do _0v[_0j]=bit32.band(_0v[_0j]-bit32.band(_0a,0xFF)+256,0xFF);_0a=_0a+${1 + Math.floor(rng() * 30)} end`),
-        (nm) => wrapA(nm, `for _0j=1,#_0v do _0v[_0j]=bit32.bxor(_0v[_0j],((_0j-1)*${SPIRAL_PRIMES[Math.floor(rng() * SPIRAL_PRIMES.length)]}+${Math.floor(rng() * 200)})%251) end`),
-    ];
-    const junkNames = [];
-    for (let i = 0; i < junkCount; i++) {
-        const tpl = junkTemplates[Math.floor(rng() * junkTemplates.length)];
-        const jn = randomName(6);
-        junkNames.push(jn);
-        forwardDecls.push(jn);
-        fragments.push({ code: tpl(jn), layer: Math.floor(rng() * 3) });
-    }
-    const chainVariant = Math.floor(rng() * 3);
-    if (chainVariant === 0) {
-        const tblName = randomName(4);
-        const ordName = randomName(4);
-        forwardDecls.push(tblName, ordName);
-        const realFns = [n5, n4, n3, n2, n1, nF];
-        const allIndices = [];
-        for (let i = 1; i <= realFns.length; i++)
-            allIndices.push(i);
-        for (let i = allIndices.length - 1; i > 0; i--) {
-            const j = Math.floor(rng() * (i + 1));
-            [allIndices[i], allIndices[j]] = [allIndices[j], allIndices[i]];
-        }
-        const entries = [];
-        for (let i = 0; i < realFns.length; i++)
-            entries.push(`[${allIndices[i]}]=${realFns[i]}`);
-        for (let i = entries.length - 1; i > 0; i--) {
-            const j = Math.floor(rng() * (i + 1));
-            [entries[i], entries[j]] = [entries[j], entries[i]];
-        }
-        const execOrder = allIndices.slice();
-        fragments.push({ code: `${tblName}={${entries.join(",")}}`, layer: 3 });
-        fragments.push({ code: `${ordName}={${execOrder.join(",")}}`, layer: 3 });
-        fragments.push({ code: `${nAll}=function(_0K) for _0oi=1,#${ordName} do ${tblName}[${ordName}[_0oi]](_0K) end end`, layer: 3 });
-    }
-    else if (chainVariant === 1) {
-        const realFns = [n5, n4, n3, n2, n1, nF];
-        const predicates = [
-            `type("")=="string"`, `type(1)=="number"`, `select("#",1)==1`,
-            `type({})=="table"`, `type(true)=="boolean"`, `1+1==2`,
-        ];
-        const predOrder = [...predicates];
-        for (let i = predOrder.length - 1; i > 0; i--) {
-            const j = Math.floor(rng() * (i + 1));
-            [predOrder[i], predOrder[j]] = [predOrder[j], predOrder[i]];
-        }
-        const bodyParts = [];
-        for (let i = 0; i < realFns.length; i++) {
-            bodyParts.push(`if ${predOrder[i]} then ${realFns[i]}(_0K) end`);
-        }
-        fragments.push({ code: `${nAll}=function(_0K) ${bodyParts.join(";")} end`, layer: 3 });
-    }
-    else {
-        const realFns = [n5, n4, n3, n2, n1, nF];
-        fragments.push({ code: `${nAll}=function(_0K) ${realFns.map(fn => `${fn}(_0K)`).join(";")} end`, layer: 3 });
-    }
-    fragments.push({ code: `${nProtos}=function(_0ps) for _,_0p in ipairs(_0ps) do ${nPre}(_0p[1]);${nAll}(_0p[1]);if _0p[3] then ${nProtos}(_0p[3]) end end end`, layer: 4 });
-    const chainCalls = `${nPre}(${dK})\n${nAll}(${dK})\n${nProtos}(${dP})`;
+
+    fragments.push({ code: `${nInv}={${inv.join(",")}}`, layer: 0 });
+    // Zero-Hook Local ASCII Cache Table: pre-populated via raw string metatable indexing
+    fragments.push({
+        code: `do local _sc=("")[${luaEsc("char")}];${nCharTab}={};for _ci=0,255 do ${nCharTab}[_ci]=_sc(_ci) end end`,
+        layer: 0
+    });
+
+    const sExpr = ctx.secDeltaVar ? `${n.bBand}(_0i-1+(${ctx.secDeltaVar} or 0),0xFF)` : `${n.bBand}(_0i-1,0xFF)`;
+
+    fragments.push({
+        code: `${nSingleDec}=function(_0v,_0i) ` +
+            `if ${n.bType}(_0v)~="table" then return _0v end;` +
+            `local _0s=${sExpr};local _n=#_0v;local _b={};` +
+            `for _j=1,_n do _b[_j]=_0v[_j] end;` +
+            `for _j=1,_n do _b[_j]=${n.bBxor}(_b[_j],((_j-1)*${SP}+${SO}+_0s)%251) end;` +
+            `for _j=1,_n do local _h=${n.bMfloor}((_j-1)/2);local _k=((_j-1)%2==0) and ${n.bBand}(${KA}+_0s+_h*${SA},0xFF) or ${n.bBand}(${KB}+_0s+_h*${SB},0xFF);_b[_j]=${n.bBxor}(_b[_j],_k) end;` +
+            `for _j=2,_n do _b[_j]=${n.bBxor}(_b[_j],${n.bBand}(_b[_j-1]*${CM}+${CK}+_0s,0xFF)) end;` +
+            `for _j=1,_n do _b[_j]=${n.bBand}(_b[_j]-${n.bBand}(${HS}+_0s+(_j-1)*${HM},0xFF)+256,0xFF) end;` +
+            `local _res={};` +
+            `for _j=1,_n do local _un=(${nInv} and ${nInv}[${n.bBand}(_b[_j],0xFF)+1]) or _b[_j];` +
+            `_res[_j]=(${nCharTab} and ${nCharTab}[${n.bBxor}(_un,${n.bBand}(_0s+_j-1,0xFF))]) or ${n.bSchar}(${n.bBxor}(_un,${n.bBand}(_0s+_j-1,0xFF))) end;` +
+            `local _out=${n.bTconcat}(_res);for _j=1,_n do _b[_j]=0 end;return _out end`,
+        layer: 1
+    });
+
+    const chainCalls = "";
     return { fragments, forwardDecls, chainCalls };
 }
 function generateJunkFragments(fragments, forwardDecls, n) {
@@ -1765,17 +2014,24 @@ function generateJunkFragments(fragments, forwardDecls, n) {
             case 2: {
                 const ref = n ? liveRef() : '_K';
                 const a = Math.floor(rng() * 200), b = 1 + Math.floor(rng() * 200);
-                fragments.push({ code: `${jn}=function(${randomName(2)}) for _i,_v in ipairs(${ref} or {}) do if type(_v)=="table" then for _j=1,#_v do _v[_j]=bit32.bxor(_v[_j],bit32.band(_j*${b}+${a},0xFF)) end end end end`, layer });
+                const fnIpairs = n ? n.bIpairs : 'ipairs';
+                const fnType = n ? n.bType : 'type';
+                const fnBxor = n ? n.bBxor : 'bit32.bxor';
+                const fnBand = n ? n.bBand : 'bit32.band';
+                fragments.push({ code: `${jn}=function(${randomName(2)}) for _i,_v in ${fnIpairs}(${ref} or {}) do if ${fnType}(_v)=="table" then for _j=1,#_v do _v[_j]=${fnBxor}(_v[_j],${fnBand}(_j*${b}+${a},0xFF)) end end end end`, layer });
                 break;
             }
             case 3: {
                 const x = Math.floor(rng() * 100), y = 1 + Math.floor(rng() * 50);
-                fragments.push({ code: `do ${jn}=${x};for _=${1},${y} do ${jn}=bit32.band(${jn}*${1 + Math.floor(rng() * 7)}+${Math.floor(rng() * 200)},0xFFFF) end end`, layer });
+                const fnBand = n ? n.bBand : 'bit32.band';
+                fragments.push({ code: `do ${jn}=${x};for _=${1},${y} do ${jn}=${fnBand}(${jn}*${1 + Math.floor(rng() * 7)}+${Math.floor(rng() * 200)},0xFFFF) end end`, layer });
                 break;
             }
-            case 4:
-                fragments.push({ code: `if type(${jn})~="number" then ${jn}=${Math.floor(rng() * 1000)} end`, layer });
+            case 4: {
+                const fnType = n ? n.bType : 'type';
+                fragments.push({ code: `if ${fnType}(${jn})~="number" then ${jn}=${Math.floor(rng() * 1000)} end`, layer });
                 break;
+            }
             case 5: {
                 const ref = liveRef();
                 fragments.push({ code: `${jn}=${n.bType}(${ref})`, layer });
@@ -1783,7 +2039,7 @@ function generateJunkFragments(fragments, forwardDecls, n) {
             }
             case 6: {
                 const ref = liveRef();
-                fragments.push({ code: `${jn}=type(${ref})=="table" and #${ref} or 0`, layer });
+                fragments.push({ code: `${jn}=${n.bType}(${ref})=="table" and #${ref} or 0`, layer });
                 break;
             }
             case 7: {
@@ -3003,7 +3259,7 @@ export function generateRegVM(chunk, options = {}) {
     const doShuffle = level !== "debug" && featureEnabled(options, "opcodeShuffle", true);
     const encodeStrings = level !== "debug" && featureEnabled(options, "stringEncoding", true);
     const includeExecutor = options.executorGlobals ?? (level !== "debug");
-    const { encode, decode } = shuffleOpcodes(doShuffle);
+    const { encode, decode, encodeAlt } = shuffleOpcodes(doShuffle);
     const protoKeys = level === "max" ? {
         pK: randomName(2), pC: randomName(2), pP: randomName(2),
         pU: randomName(2), pN: randomName(2),
@@ -3033,17 +3289,23 @@ export function generateRegVM(chunk, options = {}) {
     const rotSeed = isObf ? (1 + Math.floor(rng() * 254)) : 0;
     const rotStep = isObf ? (1 + Math.floor(rng() * 254)) : 0;
     const rotStep2 = isObf ? (1 + Math.floor(rng() * 254)) : 0;
+    const rotStep3 = isObf ? (1 + Math.floor(rng() * 254)) : 0;
+    const tagMask = isObf ? (1 + Math.floor(rng() * 254)) : 0;
+    const deadOp = isObf ? (120 + Math.floor(rng() * 135)) : 254;
+    const targetPlaceId = Number(options?.placeId || options?.targetPlaceId || 0);
     const ctx = {
-        level, seed, names, opcodeEncode: encode, opcodeDecode: decode,
+        level, seed, names, opcodeEncode: encode, opcodeDecode: decode, opcodeAlt: encodeAlt,
         doShuffle, encodeStrings, xorKey: 0, xorStep: 0, includeExecutor, protoKeys,
         debugTrace: options.debugTrace ?? (level === "debug"),
         sbox, sboxInverse, helixSeed, helixMul, cascadeKey, cascadeMul,
         checkKeyA, checkKeyB, checkStepA, checkStepB,
         spiralPrime, spiralOffset, layerVariants,
-        dispatchVariant, dispatchMask, rotSeed, rotStep, rotStep2,
+        dispatchVariant, dispatchMask, rotSeed, rotStep, rotStep2, rotStep3, tagMask, deadOp,
+        targetPlaceId,
         argPerm: generateArgPerms(isObf),
     };
-    const doFusion = featureEnabled(options, "opcodeFusion", level !== "debug");
+    // Opcode fusion disabled in Sentinel v4.2 per dj's directive: keep 100% fine-grained atomic opcodes
+    const doFusion = false;
     if (doFusion) {
         const allFusionOps = [
             45 /* RegOp.FUSED_TEST_JMP */, 46 /* RegOp.FUSED_EQ_JMP */,
@@ -3079,12 +3341,10 @@ export function generateRegVM(chunk, options = {}) {
         ctx.usedOps = used;
         console.log(`[RegVM] Dead handler elimination: ${used.size}/${handlerRegistry.size} opcodes used`);
     }
-    const dvNames = ["flat", "xor-masked", "binary-tree", "grouped", "table-dispatch", "table-xor"];
     if (level !== "debug")
-        console.log(`[RegVM] Dispatch: variant ${dispatchVariant} (${dvNames[dispatchVariant] || "unknown"})`);
-    const mappedCode = doShuffle ? mapRegBytecode(chunk.code, encode, ctx.argPerm) : chunk.code;
-    const dataK = serializeConstants(chunk.K, ctx);
-    const dataC = serializeRegCode(mappedCode, ctx);
+        console.log(`[RegVM] Dispatch: 2-Layer Nested CFF + Variable-Len Buffer VM (deadOp=${deadOp})`);
+    const dataK = serializeConstants(chunk.K, ctx, true);
+    const dataC = serializeRegCode(chunk.code, ctx);
     const dataP = serializeRegProtos(chunk.protos, ctx);
     const dK = level === "debug" ? "_dK" : randomName(3);
     const dC = level === "debug" ? "_dC" : randomName(3);
@@ -3096,10 +3356,17 @@ export function generateRegVM(chunk, options = {}) {
     if (level === "debug") {
         const builtinCaps = buildBuiltinCaptures(ctx);
         const envSetup = buildEnvSetup(ctx);
+        let decResult = null;
+        if (encodeStrings) {
+            decResult = buildDecoderChain(ctx, dK, dP);
+        }
         const vmRuntime = buildVMRuntime(ctx);
         const parts = [];
         parts.push(builtinCaps.code);
         parts.push(envSetup);
+        if (decResult) {
+            parts.push(...decResult.fragments.map(f => f.code));
+        }
         parts.push(vmRuntime);
         parts.push(`local ${dK}=${dataK}`);
         parts.push(`local ${dC}=${dataC}`);
@@ -3115,21 +3382,19 @@ export function generateRegVM(chunk, options = {}) {
             names.bPcall, names.bXpcall, names.bSelect, names.bType,
             names.tPack, names.tUnpack, names.bTcreate, names.bTconcat,
             names.bMfloor, names.bIpairs, names.bTostring, names.bRawget,
-            names.bSetmeta, names.bBxor, names.bBand,
-            names.bGetmeta, names.bNext,
+            names.bSetmeta, names.bBxor, names.bBand, names.bLsh, names.bRsh,
+            names.bSbyte, names.bSchar, names.bBcr, names.bBlen, names.bBr8,
+            names.bBw8, names.bBcp, names.bBfs, names.bGetmeta, names.bNext, names.fnv,
         ];
         forwardDecls.push(...builtinNames);
+        if (builtinCaps.secDeltaVar) {
+            forwardDecls.push(builtinCaps.secDeltaVar, builtinCaps.secStateVar);
+        }
         allFragments.push({ code: builtinCaps.assignOnly, layer: -1 });
         const envResult = buildEnvFragments(ctx);
         allFragments.push(...envResult.fragments);
         forwardDecls.push(...envResult.forwardDecls);
-        forwardDecls.push(names.run);
-        const vmCode = buildVMRuntime(ctx, true);
-        allFragments.push({ code: vmCode, layer: Math.floor(rng() * 3) });
-        forwardDecls.push(dK, dC, dP);
-        allFragments.push({ code: `${dK}=${dataK}`, layer: Math.floor(rng() * 3) });
-        allFragments.push({ code: `${dC}=${dataC}`, layer: Math.floor(rng() * 3) });
-        allFragments.push({ code: `${dP}=${dataP}`, layer: Math.floor(rng() * 3) });
+
         let chainCalls = "";
         if (encodeStrings) {
             const decResult = buildDecoderChain(ctx, dK, dP);
@@ -3137,6 +3402,17 @@ export function generateRegVM(chunk, options = {}) {
             forwardDecls.push(...decResult.forwardDecls);
             chainCalls = decResult.chainCalls;
         }
+
+        forwardDecls.push(
+            names.wLut, names.shCache, names.pk, names.rb, names.wb,
+            names.cp, names.dec, names.adv, names.oMap, names.run
+        );
+        const vmCode = buildVMRuntime(ctx, true);
+        allFragments.push({ code: vmCode, layer: Math.floor(rng() * 3) });
+        forwardDecls.push(dK, dC, dP);
+        allFragments.push({ code: `${dK}=${dataK}`, layer: Math.floor(rng() * 3) });
+        allFragments.push({ code: `${dC}=${dataC}`, layer: Math.floor(rng() * 3) });
+        allFragments.push({ code: `${dP}=${dataP}`, layer: Math.floor(rng() * 3) });
         generateJunkFragments(allFragments, forwardDecls, names);
         const minLayer = allFragments.reduce((mn, f) => Math.min(mn, f.layer), 0);
         const maxLayer = allFragments.reduce((mx, f) => Math.max(mx, f.layer), 0);
@@ -3166,6 +3442,7 @@ export function generateRegVM(chunk, options = {}) {
             const stA = randomName(3);
             const stB = randomName(3);
             const invVar = randomName(2);
+            const hashVar = randomName(3);
             const multA = 31;
             const multB = 17;
             const offsetB = 101;
@@ -3226,7 +3503,8 @@ export function generateRegVM(chunk, options = {}) {
 
                 const jn = randomName(3);
                 const jn2 = randomName(3);
-                const fc = `local ${jn}={11,22,33,44};local ${jn2}=0;for _k=1,#${jn} do ${jn2}=bit32.bxor(${jn2},${jn}[_k]) end;${stA}=bit32.bxor(${stA},${jn2});`;
+                const loopK = randomName(3);
+                const fc = `local ${jn}={11,22,33,44};local ${jn2}=0;for ${loopK}=1,#${jn} do ${jn2}=_bxor(${jn2},${jn}[${loopK}]) end;${stA}=_bxor(${stA},${jn2});`;
                 const nextFakePair = realPairs[Math.floor(rng() * realPairs.length)];
                 fakeStates.push({
                     hash: fh,
@@ -3249,25 +3527,31 @@ export function generateRegVM(chunk, options = {}) {
                 const tA = nextPair.a;
                 const tB = nextPair.b;
                 const mA = 1 + Math.floor(rng() * 15);
-                const transA = `${stA}=math.floor(${tA * mA}/${mA})`;
+                // Data-dependent CFF v2: state coupled with live runtime security delta
+                const deltaTerm = ctx.secDeltaVar ? `_bxor(${tA},(${ctx.secDeltaVar} or 0))` : `${tA}`;
+                const transA = `${stA}=math.floor((${deltaTerm})*${mA}/${mA})`;
                 const maskB = 1 + Math.floor(rng() * 65535);
-                const transB = `${stB}=bit32.bxor(bit32.bxor(${tB},${maskB}),${maskB})`;
+                const transB = `${stB}=_bxor(_bxor(${tB},${maskB}),${maskB})`;
                 return `${transA};${transB};`;
             };
 
             const initPair = realPairs[0];
+            parts.push(`local _b32=(type(bit32)=="table" and bit32) or (type(getgenv)=="function" and type(getgenv().bit32)=="table" and getgenv().bit32) or (type(_G)=="table" and type(_G.bit32)=="table" and _G.bit32) or (type(bit)=="table" and bit) or {}`);
+            parts.push(`local _bxor=_b32.bxor or function(a,b) a=tonumber(a) or 0;b=tonumber(b) or 0;local p,c=1,0 while a>0 or b>0 do local ra,rb=a%2,b%2 if ra~=rb then c=c+p end a,b,p=math.floor(a/2),math.floor(b/2),p*2 end return c end`);
+            parts.push(`local _band=_b32.band or function(a,b) a=tonumber(a) or 0;b=tonumber(b) or 0;local p,c=1,0 while a>0 and b>0 do if a%2==1 and b%2==1 then c=c+p end a,b,p=math.floor(a/2),math.floor(b/2),p*2 end return c end`);
             parts.push(`local ${stA}=${initPair.a}`);
             parts.push(`local ${stB}=${initPair.b}`);
             parts.push(`local ${invVar}=${Math.floor(rng() * 50) + 7}`);
             parts.push(`while true do`);
-            parts.push(`local _h=bit32.bxor((${stA}*${multA})%${modM},(${stB}*${multB}+${offsetB})%${modM})`);
+            parts.push(`local ${hashVar}=_bxor(((${stA} or 0)*${multA})%${modM},(((${stB} or 0)*${multB}+${offsetB})%${modM}))`);
 
             for (let si = 0; si < allSt.length; si++) {
                 const st = allSt[si];
                 const kw = si === 0 ? "if" : "elseif";
                 const isFake = Boolean(st.isFake);
-                const parityVal = isFake ? 1 : 0;
-                const cond = `_h==${st.hash} and ((${invVar}*(${invVar}+1))%2==${parityVal}) and math.floor(2.5)==2`;
+                const cond = isFake
+                    ? `${hashVar}==${st.hash} and ((${invVar}*(${invVar}+1))%2==1)`
+                    : `${hashVar}==${st.hash}`;
 
                 parts.push(`${kw} ${cond} then`);
                 parts.push(st.code);
@@ -3277,7 +3561,7 @@ export function generateRegVM(chunk, options = {}) {
                     parts.push(emitDualTransition(st.nextPair));
                 }
             }
-            parts.push(`end`);
+            parts.push(`else return nil end`);
             parts.push(`end`);
             if (process.env.ENV_CHECK === '1') {
                 const chkVars = [
@@ -3318,19 +3602,19 @@ export function generateRegVM(chunk, options = {}) {
         console.log(`[RegVM] DUMP_RAW: saved ${output.length} chars to debug-vm-raw.lua`);
     }
     // Direct Native Register Virtual Machine output (Zero loadstring at runtime)
-    console.log(`[RegVM] Emitting 100% Native Bytecode Virtual Machine (Zero-loadstring, Industrial CFF)`);
+    console.log(`[RegVM] Emitting Sentinel v4.4 Variable-Length Buffer VM + 2-Layer Nested CFF`);
     output = `return(function(...) ${output} end)(...)`;
     if (!options._noWatermark) {
         const art = [
             "-- ==============================================================================",
-            "--  PAYOMBØYZ SENTINEL PROTOCOL v6.8 -- REGISTER VM AND CFF DISPATCHER",
-            "--  Cryptographic Protection: Luau Native Register Bytecode + Control Flow Flattening",
-            "--  Tamper Resistance: Memory Hook Guard, Dynamic S-Box and Anti-AST Metatable Poison",
+            "--  PAYOMBØYZ SENTINEL PROTOCOL v4.4 -- VARIABLE-LEN BUFFER VM & NESTED CFF",
+            "--  Cryptographic Protection: Variable-Width Buffer Bytecode + Rolling Xorshift32 + 2-Layer CFF",
+            "--  Tamper Resistance: Dead-Op Wipe, Encrypted Shadow Restore & FNV-1a Anti-Hook Guards",
             "-- =============================================================================="
         ];
         output = `--[[\n${art.join('\n')}\n]]\n` + output;
     }
-    if (level !== "debug") {
+    if (level !== "debug" && !options.noMinify) {
         const watermarkEnd = output.indexOf(']]\n');
         if (watermarkEnd !== -1) {
             const watermark = output.substring(0, watermarkEnd + 3);

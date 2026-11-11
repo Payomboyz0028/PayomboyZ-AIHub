@@ -4,7 +4,7 @@
 
 ==============================================================================
 
-  ⚡ PAYOMBOYZ SECURITY (SENTINEL ENGINE v4.3)
+  ⚡ PAYOMBOYZ SECURITY (SENTINEL ENGINE v4.4)
 
   Protected by PayomboyZ Multi-Engine & AI Security Layer
 
@@ -1902,7 +1902,7 @@ end
 
                 "ระบบเปิดใช้งาน Adaptive Hybrid Tier อัตโนมัติ: ป้องกัน Double-VM Overhead "
 
-                "และซีลด้วย Polymorphic Keystream S-Box Sentinel Engine v4.3 (0 GC Overhead, 60 FPS นิ่งสนิท)"
+                "และซีลด้วย Polymorphic Keystream S-Box Sentinel Engine v4.4 (0 GC Overhead, 60 FPS นิ่งสนิท)"
 
             )
 

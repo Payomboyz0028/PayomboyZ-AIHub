@@ -398,6 +398,7 @@ function compileTableCtor(ctx, fields, dest) {
     regEmit(c, 9 /* RegOp.NEWTABLE */, dest, 0, 0);
     let arrIdx = 0;
     for (let fi = 0; fi < fields.length; fi++) {
+        const sField = saveFree(ctx);
         const f = fields[fi];
         const isLast = fi === fields.length - 1;
         if (f.kind === "index") {
@@ -429,6 +430,7 @@ function compileTableCtor(ctx, fields, dest) {
                 regEmit(c, 8 /* RegOp.SETTABLE */, dest, key, val);
             }
         }
+        restoreFree(ctx, sField);
     }
     restoreFree(ctx, s);
     if (dest >= ctx.freeReg)

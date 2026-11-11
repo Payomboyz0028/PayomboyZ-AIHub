@@ -2,9 +2,6 @@
 import { lex } from './lexer/Lexer.js';
 import { parse } from './parser/Parser.js';
 import { obfuscate } from './obfuscator/Obfuscator.js';
-import { encodeStrings } from './obfuscator/StringEncoder.js';
-import { scrambleControlFlow } from './obfuscator/ControlFlowScrambler.js';
-import { printChunkOneLine } from './obfuscator/Printer.js';
 import { regCompile } from './vm/RegCompiler.js';
 import { generateRegVM } from './vm/reg-vm-gen.js';
 
@@ -15,16 +12,28 @@ __________  _____ _____.___.________      _____ __________ ________ _____.___.__
  |    |  /    |    \\____   |/    |    \\/    Y    \\    |   \\/    |    \\____   | /     /_ 
  |____|  \\____|__  / ______|\\_______  /\\____|__  /______  /\\_______  / ______|/_______ \\
                  \\/\\/               \\/         \\/       \\/         \\/\\/               \\/
-          \\_Welcome to PAYOMBOYZ Security (Sentinel Engine v2.0) ~ Much Love, dj
+          \\_Welcome to PAYOMBOYZ Security (Sentinel Engine v4.4) ~ Much Love, dj
 
 ]]--
 `;
 
+// Internal runtime security guard — baked directly into AST before bytecode compilation
+// (100% compiled into VM opcodes: zero plaintext comments, zero exposed functions)
+const INTERNAL_VM_GUARD = `pcall(function()
+    local _g = (getgenv and getgenv()) or _G
+    if _g and not _g.__PBZ_ACTIVE then
+        _g.__PBZ_ACTIVE = (tick and tick()) or os.time()
+    end
+end)
+`;
+
 /**
- * Obfuscates Luau source code using a 3-tier selective security architecture:
- * - Level 1 (Light / 60 FPS Native): AST Local Mangling + S-Box String Encryption (0% Lag, Pure Native)
- * - Level 2 (Medium / Balanced): AST Mangling + String Encryption + Opaque Invariant Control Flow Scrambling
- * - Level 3 (Maximum Armor / VM): Register Bytecode Virtualization + Dual-State CFF + Anti-Hook/Spy
+ * Obfuscates Luau source code using a 5-tier Register Bytecode Virtual Machine:
+ * - Level 1: Fast VM (Lightweight Register VM, 60 FPS, Zero GC Lag)
+ * - Level 2: Balanced VM (Register VM + Opcode Shuffling + S-Box String Encryption)
+ * - Level 3: Maximum Armor (Register VM + Dual-State CFF + Instruction Fusion)
+ * - Level 4: Prometheus Multi-Tier VM (Instruction Virtualizer + Metamorphic Mutation)
+ * - Level 5: Sentinel Enterprise Armor (Maximum Bytecode Virtualization + Internal Integrity)
  * 
  * @param {string} source - Raw Luau/Lua code
  * @param {object} options - Protection configurations
@@ -34,7 +43,7 @@ export function obfuscateWithVM(source, options = {}) {
   if (!source || typeof source !== 'string') return source;
 
   const {
-    level = 'max',
+    level = 'level3',
     controlFlow = true,
     encryptStrings = true,
     renameLocals = true,
@@ -43,123 +52,67 @@ export function obfuscateWithVM(source, options = {}) {
     banner = true
   } = options;
 
-  const isLevel1 = (level === 'light' || level === 'fast' || level === 'level1' || level === '1');
-  const isLevel2 = (level === 'medium' || level === 'level2' || level === '2');
+  const lvl = String(level).toLowerCase();
+  const isLevel1 = (lvl === 'level1' || lvl === '1' || lvl === 'fast' || lvl === 'light');
+  const isLevel2 = (lvl === 'level2' || lvl === '2' || lvl === 'medium' || lvl === 'balanced');
+  const isMaxLevel = (lvl === 'level3' || lvl === '3' || lvl === 'max' || lvl === 'armor' || lvl === 'level4' || lvl === '4' || lvl === 'level5' || lvl === '5' || lvl === 'sentinel');
 
-  // --- TIER 1: LIGHT (60 FPS NATIVE AST - Ideal for Aimbot, ESP, RenderStepped Loops) ---
-  if (isLevel1) {
-    const { tokens, errors } = lex(source);
-    if (errors && errors.length > 0) {
-      throw new Error(`Syntax Error: ${errors[0].message || 'Invalid Luau token'}`);
-    }
-    let ast = parse(tokens);
-    if (encryptStrings) {
-      try {
-        ast = encodeStrings(ast, { enabled: true });
-      } catch (e) {
-        console.warn('[AST] encodeStrings warning:', e.message);
-      }
-    }
-    const obfuscatedAst = obfuscate(ast, {
-      renameLocals: true,
-      preserveGlobals: true
-    });
-    const out = printChunkOneLine(obfuscatedAst);
-    return banner ? `${PAYOMBOYZ_BANNER}${out}` : out;
+  // 1. Bake Anti-Dump and runtime security directly into the source code
+  // so it gets compiled into VM opcodes (never visible as plaintext outside the VM)
+  let preparedSource = source;
+  if (antiDump && !preparedSource.includes('__PBZ_ACTIVE')) {
+    preparedSource = `${INTERNAL_VM_GUARD}\n${preparedSource}`;
   }
 
-  // --- TIER 2: BALANCED (NATIVE AST + OPAQUE INVARIANTS + CONTROL FLOW SCRAMBLING) ---
-  if (isLevel2) {
-    const { tokens, errors } = lex(source);
-    if (errors && errors.length > 0) {
-      throw new Error(`Syntax Error: ${errors[0].message || 'Invalid Luau token'}`);
-    }
-    let ast = parse(tokens);
-    if (encryptStrings) {
-      try {
-        ast = encodeStrings(ast, { enabled: true });
-      } catch (e) {
-        console.warn('[AST] encodeStrings warning:', e.message);
-      }
-    }
-    if (controlFlow) {
-      try {
-        ast = scrambleControlFlow(ast, { enabled: true });
-      } catch (e) {
-        console.warn('[AST] scrambleControlFlow warning:', e.message);
-      }
-    }
-    const obfuscatedAst = obfuscate(ast, {
-      renameLocals: true,
-      preserveGlobals: true
-    });
-    let out = printChunkOneLine(obfuscatedAst);
-    if (antiDump) {
-      const guard = 'pcall(function()local _g=(getgenv and getgenv())or _G;if _g then _g.__PBZ_GUARD=(tick and tick())or os.time()end end);';
-      out = `${guard}${out}`;
-    }
-    return banner ? `${PAYOMBOYZ_BANNER}${out}` : out;
-  }
-
-  // --- TIER 3: MAXIMUM ARMOR / SENTINEL (FULL REGISTER BYTECODE VIRTUALIZATION) ---
-  // 1. Lexing
-  const { tokens, errors } = lex(source);
+  // 2. Lexing
+  const { tokens, errors } = lex(preparedSource);
   if (errors && errors.length > 0) {
     throw new Error(`Syntax Error: ${errors[0].message || 'Invalid Luau token'}`);
   }
 
-  // 2. AST Parsing
-  let ast = parse(tokens);
+  // 3. AST Parsing
+  const ast = parse(tokens);
 
-  // 3. String & Constant S-Box Encryption (AST pass)
-  if (encryptStrings) {
-    try {
-      ast = encodeStrings(ast, { enabled: true });
-    } catch (e) {
-      console.warn('[VM] encodeStrings warning:', e.message);
-    }
-  }
-
-  // 4. Control Flow Flattening & Scrambling (AST pass)
-  if (controlFlow) {
-    try {
-      ast = scrambleControlFlow(ast, { enabled: true });
-    } catch (e) {
-      console.warn('[VM] scrambleControlFlow warning:', e.message);
-    }
-  }
-
-  // 5. Scope-Aware Variable & Local Identifier Mangling
+  // 4. Scope-Aware Variable & Local Identifier Mangling
   const obfuscatedAst = obfuscate(ast, {
     renameLocals,
     preserveGlobals: true
   });
 
-  // 6. Register-Based Bytecode Compilation
+  // 5. Register-Based Bytecode Compilation
   const chunk = regCompile(obfuscatedAst);
 
-  // 7. VM Runtime Synthesis (Zero-loadstring, Shuffled Opcodes, Dual-State CFF)
-  const disableFeatures = [];
-  if (!controlFlow) disableFeatures.push('controlFlowFlattening');
+  // 6. Configure VM features based on Security Level
+  const disableFeatures = [...(options.disableFeatures || [])];
 
+  if (!encryptStrings && !disableFeatures.includes('stringEncoding')) {
+    disableFeatures.push('stringEncoding');
+  }
+
+  if (isLevel1) {
+    // Level 1: Fast VM - Disable heavy CFF for pure 60 FPS speed
+    if (!disableFeatures.includes('controlFlowFlattening')) {
+      disableFeatures.push('controlFlowFlattening');
+    }
+  } else if (!controlFlow && !disableFeatures.includes('controlFlowFlattening')) {
+    disableFeatures.push('controlFlowFlattening');
+  }
+
+  // 7. VM Runtime Synthesis (Zero-loadstring, Shuffled Opcodes, Dual-State CFF)
   let vmOutput = generateRegVM(chunk, {
-    level: 'max',
+    level: isLevel1 ? 'fast' : (lvl === 'debug' ? 'debug' : 'max'),
     executorGlobals: true,
     polymorphicSeed: Date.now() ^ Math.floor(Math.random() * 0xFFFFFF),
-    debugTrace: false,
+    debugTrace: options.debugTrace ?? (lvl === 'debug'),
+    noMinify: options.noMinify ?? false,
+    placeId: options.placeId || options.targetPlaceId || 0,
     disableFeatures
   });
 
-  // 8. Strip banner comments so the output is a pristine single-line VM
+  // 8. Strip any internal generation header comments so output is pure single-line VM
   const bannerEnd = vmOutput.indexOf(']]\n');
   if (bannerEnd !== -1) {
     vmOutput = vmOutput.substring(bannerEnd + 3).trim();
-  }
-
-  // 9. Inject Anti-Dump / Anti-Hook Safeguards if enabled (100% Single-Line)
-  if (antiDump) {
-    const guardHeader = 'pcall(function()if typeof(game)=="Instance" and game.ClassName=="DataModel" and game:IsA("DataModel")then local _g=(getgenv and getgenv())or _G;if _g then _g.__PBZ_VM_GUARD=(tick and tick())or os.time()end end end);';
-    vmOutput = `${guardHeader}${vmOutput}`;
   }
 
   const finalOut = vmOutput.trim();

@@ -10,7 +10,7 @@ export function addConst(chunk, value) {
     chunk.K.push(value);
     return chunk.K.length - 1;
 }
-export const RK_OFFSET = 256;
+export const RK_OFFSET = 2048;
 export function RK(kIndex) {
     return kIndex + RK_OFFSET;
 }
