@@ -8,8 +8,8 @@ Direct Allegiance: dj (Supreme Authority)
 
 GOD MODE Core Capabilities:
 1. Strict 2-Factor Authentication:
-   - Step 1: St@313326339
-   - Step 2: 280342
+   - Step 1: GODMODE_PASSWORD (env)
+   - Step 2: GODMODE_PIN (env)
 2. Room / Channel Isolation:
    - Operates strictly in channels configured via /godmode setup
 3. PBG Agentic Architecture & High-Detail Communication:
@@ -23,7 +23,7 @@ GOD MODE Core Capabilities:
    - Desktop & Window Screen Capture
 5. The 3 Hard Guardrails:
    - [G1] No out-of-scope file deletion
-   - [G2] Risky file download requires PIN '280342' every single time
+   - [G2] Risky file download requires Security PIN every single time
    - [G3] AI cannot make payments or checkout; max is QR capture or slip processing
 ====================================================================
 """
@@ -94,8 +94,8 @@ except Exception:
 from pbg_memory import MEMORY_ENGINE
 
 # Security PINs & Master Passwords
-PASSWORD_STAGE_1 = "St@313326339"
-PASSWORD_STAGE_2 = "280342"
+PASSWORD_STAGE_1 = os.getenv("GODMODE_PASSWORD", "").strip()
+PASSWORD_STAGE_2 = os.getenv("GODMODE_PIN", os.getenv("ADMIN_PIN", "")).strip()
 SESSION_TIMEOUT_SECONDS = 1800  # 30 minutes of inactivity auto-locks
 
 CONFIG_FILE = BASE_DIR / "bot" / "godmode_config.json"
@@ -142,7 +142,7 @@ class HardGuardrails:
 
     @classmethod
     def check_download_risk(cls, command_or_url: str, pin: str = "") -> Tuple[bool, str]:
-        """Guardrail 2: Risky downloads require PIN '280342'."""
+        """Guardrail 2: Risky downloads require configured Security PIN."""
         text = command_or_url.lower()
         is_download = any(re.search(pat, text) for pat in cls.DOWNLOAD_COMMAND_PATTERNS) or "http" in text
         is_risky_ext = any(ext in text for ext in cls.RISKY_EXTENSIONS)
@@ -1265,7 +1265,7 @@ ANTIGRAVITY & ENVIRONMENT SUPERIORITY:
 
 THE 3 HARD GUARDRAILS (NEVER VIOLATE):
 1. NO OUT-OF-SCOPE DELETION: Never delete files outside project workspace or operating scope.
-2. RISKY DOWNLOADS REQUIRE PIN '280342': If an external executable, binary, or risky file must be downloaded, you must verify PIN 280342.
+2. RISKY DOWNLOADS REQUIRE PIN '': If an external executable, binary, or risky file must be downloaded, you must verify PIN .
 3. NO AUTONOMOUS PAYMENTS: You cannot pay or checkout on dj's behalf. Max allowed: display/capture QR code for dj to pay, or take dj's uploaded slip to submit to top-up endpoints.
 
 AVAILABLE AGENT ACTIONS (Emit one per turn if action needed):
@@ -1709,7 +1709,7 @@ def build_godmode_panel_embed() -> discord.Embed:
         name="🛑 3 กฎเหล็กพิทักษ์ความปลอดภัย (Hard Guardrails)",
         value=(
             "1. 🔒 **ห้ามลบไฟล์นอก Scope:** ป้องกันการสั่งลบไฟล์ระบบหรือไฟล์นอกโปรเจกต์\n"
-            "2. 🛡️ **โหลดไฟล์เสี่ยงต้องใช้ PIN `280342`:** ร้องขอรหัสยืนยันใหม่ทุกครั้งหากต้องโหลดไฟล์เสี่ยง\n"
+            "2. 🛡️ **โหลดไฟล์เสี่ยงต้องใช้ PIN ``:** ร้องขอรหัสยืนยันใหม่ทุกครั้งหากต้องโหลดไฟล์เสี่ยง\n"
             "3. 💳 **ห้ามสั่งชำระเงินแทน:** ทำได้มากที่สุดคือแคป QR Code สำหรับจ่าย หรือนำสลิปไปส่งเติมเงินต่อ"
         ),
         inline=False
@@ -1999,7 +1999,7 @@ async def godmode_status_cmd(interaction: discord.Interaction):
 @godmode_group.command(name="exec", description="รันคำสั่ง PowerShell / CMD บนคอมพิวเตอร์โฮสต์โดยตรง (พร้อมตรวจ Guardrail)")
 @app_commands.describe(
     command="คำสั่งที่ต้องการรันบน PowerShell เช่น dir, Get-Process...",
-    pin="รหัสผ่าน 280342 (เฉพาะเมื่อต้องดาวน์โหลดไฟล์แปลกปลอม/เสี่ยง)"
+    pin="รหัสผ่าน  (เฉพาะเมื่อต้องดาวน์โหลดไฟล์แปลกปลอม/เสี่ยง)"
 )
 async def godmode_exec_cmd(interaction: discord.Interaction, command: str, pin: Optional[str] = None):
     if not GODMODE_STATE.is_channel_installed(interaction.channel_id):
@@ -2033,7 +2033,7 @@ async def godmode_exec_cmd(interaction: discord.Interaction, command: str, pin: 
 @godmode_group.command(name="ask", description="สั่งการ PBG ให้ทำงานแทนบนคอมพิวเตอร์อย่างละเอียด (ส่งรูปได้)")
 @app_commands.describe(
     prompt="คำสั่งสำหรับ PBG (เช่น สั่งแก้สคริปต์, ท่องเว็บ, ส่งชาร์ต, ขอรูปภาพ)",
-    pin="รหัสยืนยัน 280342 (หากมีคำสั่งดาวน์โหลดไฟล์เสี่ยง)"
+    pin="รหัสยืนยัน  (หากมีคำสั่งดาวน์โหลดไฟล์เสี่ยง)"
 )
 async def godmode_ask_cmd(interaction: discord.Interaction, prompt: str, pin: Optional[str] = None):
     if not GODMODE_STATE.is_channel_installed(interaction.channel_id):
@@ -2157,7 +2157,7 @@ async def handle_godmode_message(message: discord.Message) -> bool:
 
     # 1. Check Authentication (with Fast Mobile 2FA detection)
     if not GODMODE_STATE.is_user_authenticated(message.author.id):
-        # Allow instant text login: '!auth St@313326339 280342' or typing both passwords
+        # Allow instant text login: '!auth  ' or typing both passwords
         if (PASSWORD_STAGE_1 in message.content and PASSWORD_STAGE_2 in message.content) or message.content.strip().startswith("!auth"):
             tokens = message.content.strip().split()
             p1, p2 = "", ""
@@ -2201,7 +2201,7 @@ async def handle_godmode_message(message: discord.Message) -> bool:
             view.add_item(btn)
             await message.reply(
                 "⛔ **GODMODE LOCKED // ระบบถูกล็อกความปลอดภัย**\n"
-                "กรุณากดปุ่มด้านล่างเพื่อใส่รหัสผ่าน 2 ชั้น หรือพิมพ์ `!auth St@313326339 280342` เพื่อปลดล็อคก่อนสั่งการ PBG",
+                "กรุณากดปุ่มด้านล่างเพื่อใส่รหัสผ่าน 2 ชั้น หรือพิมพ์ `!auth  ` เพื่อปลดล็อคก่อนสั่งการ PBG",
                 view=view,
                 mention_author=False
             )
@@ -2212,7 +2212,7 @@ async def handle_godmode_message(message: discord.Message) -> bool:
     if not content and not message.attachments:
         return False
 
-    extracted_pin = "280342" if "280342" in content else ""
+    extracted_pin = "" if "" in content else ""
 
     # 2. Extract Attached Files (Scripts, Documents & Images with Deep Multimodal Vision)
     extra_context = []

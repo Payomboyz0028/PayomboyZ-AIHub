@@ -76,7 +76,7 @@ if str(BASE_DIR) not in sys.path:
 # =========================================================================
 DEFAULT_PORT = 49288
 SESSION_TOKENS: Dict[str, float] = {}  # token -> creation timestamp
-MASTER_PASSWORDS = {"St@313326339", "280342"}
+MASTER_PASSWORDS = {x for x in (os.getenv("GODMODE_PASSWORD", ""), os.getenv("GODMODE_PIN", ""), os.getenv("ADMIN_PIN", "")) if x}
 TOKEN_TTL_SECONDS = 86400  # 24 hours per session
 
 

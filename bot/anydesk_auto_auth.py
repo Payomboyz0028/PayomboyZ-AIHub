@@ -76,7 +76,11 @@ def find_anydesk_window() -> int:
     user32.EnumDesktopWindows(hdesk, WNDENUMPROC(enum_cb), 0)
     return target_hwnd
 
-def perform_anydesk_injection(password: str = "St@313326339", max_wait_seconds: int = 25) -> bool:
+def perform_anydesk_injection(password: str = "", max_wait_seconds: int = 25) -> bool:
+    password = password or os.getenv("ANYDESK_PASSWORD", "")
+    if not password:
+        print("[AUTH ENGINE] ANYDESK_PASSWORD env missing; skipping.", flush=True)
+        return False
     """
     Watches for AnyDesk window/modal, brings to focus, and enters password.
     Polls repeatedly to handle connection handshake delays.
@@ -139,6 +143,6 @@ def perform_anydesk_injection(password: str = "St@313326339", max_wait_seconds: 
     return injected
 
 if __name__ == "__main__":
-    pwd = sys.argv[1] if len(sys.argv) > 1 else "St@313326339"
+    pwd = sys.argv[1] if len(sys.argv) > 1 else os.getenv("ANYDESK_PASSWORD", "")
     success = perform_anydesk_injection(pwd)
     print("SUCCESS" if success else "TIMEOUT_OR_FAILED")
