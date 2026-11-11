@@ -12,6 +12,13 @@ import glob
 import threading
 import time
 
+os.environ.setdefault("PYTHONUNBUFFERED", "1")
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+except Exception:
+    pass
+
 # Auto-detect and prepend .local site-packages for Bot-Hosting.net Linux containers
 for _lp in [
     "/home/container/.local/lib/python3.11/site-packages",

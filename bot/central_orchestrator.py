@@ -285,7 +285,7 @@ class CentralOrchestrator:
 
                         return {
                             "success": True,
-                            "engine": res_data.get("engine", "🔴 Level 3: Maximum Armor (Sentinel Engine v4.2)"),
+                            "engine": res_data.get("engine", "🔴 Level 3: Maximum Armor (Sentinel Engine v4.3)"),
                             "level": level_param,
                             "original_size": res_data.get("originalSize", len(source_code)),
                             "obfuscated_size": res_data.get("obfuscatedSize", len(obf_code)),
@@ -301,7 +301,7 @@ class CentralOrchestrator:
                             "error": res_data.get("error", "Unknown obfuscation error"),
                             "is_syntax_error": res_data.get("is_syntax_error", False),
                             "elapsed": elapsed,
-                            "engine": res_data.get("engine", "Sentinel Engine v4.2 Pre-Flight")
+                            "engine": res_data.get("engine", "Sentinel Engine v4.3 Pre-Flight")
                         }
         except Exception as api_err:
             print(f"[CENTRAL ORCHESTRATOR] Cloud API failed ({api_err}), falling back to local engine...", flush=True)

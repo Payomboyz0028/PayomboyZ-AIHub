@@ -598,8 +598,8 @@ def build_obfuscate_embed(res: dict, input_name: str) -> tuple[discord.Embed, li
     verified = res.get("verified", True)
 
     embed = discord.Embed(
-        title="⚡ PAYOMBOYZ Security (Sentinel Engine v4.2) | ✅ เข้ารหัสและป้องกันสำเร็จ",
-        description=f"สคริปต์ `{safe_input_name}` ได้รับการป้องกันผ่านสถาปัตยกรรม **PAYOMBOYZ Security (Sentinel Engine v4.2)** เรียบร้อยแล้ว รองรับ Executor และภาษาไทย 100%",
+        title="⚡ PAYOMBOYZ Security (Sentinel Engine v4.3) | ✅ เข้ารหัสและป้องกันสำเร็จ",
+        description=f"สคริปต์ `{safe_input_name}` ได้รับการป้องกันผ่านสถาปัตยกรรม **PAYOMBOYZ Security (Sentinel Engine v4.3)** เรียบร้อยแล้ว รองรับ Executor และภาษาไทย 100%",
         color=discord.Color.purple()
     )
 
@@ -632,7 +632,7 @@ def build_obfuscate_embed(res: dict, input_name: str) -> tuple[discord.Embed, li
     if script_summary:
         embed.add_field(name="📝 สรุปการทำงานของสคริปต์ (Script Overview)", value=script_summary, inline=False)
 
-    embed.set_footer(text="PAYOMBOYZ Security (Sentinel Engine v4.2) • payomboyzcreative.online")
+    embed.set_footer(text="PAYOMBOYZ Security (Sentinel Engine v4.3) • payomboyzcreative.online")
 
     output_path = res.get("output_path")
     obf_code = res.get("obfuscated_code", "")
@@ -647,30 +647,37 @@ def build_obfuscate_embed(res: dict, input_name: str) -> tuple[discord.Embed, li
     return embed, files
 
 
+_views_registered = False
+_commands_synced = False
+
+
 @bot.event
 async def on_ready():
+    global _views_registered, _commands_synced
     print("=" * 64)
     print(f"[AI BOT SOURCE] {Path(__file__).resolve()}", flush=True)
     print("[AI ROUTER BUILD] provider-health-v2", flush=True)
     print("  ⚡ PAYOMBØYZ AI & MULTI-ENGINE DEOBFUSCATOR BOT READY")
     print("=" * 64)
-    try:
-        bot.add_view(DeobfPanelView())
-        print("  [+] Registered persistent DeobfPanelView into Bot.", flush=True)
-    except Exception as pe:
-        print(f"  [-] Notice on DeobfPanelView registration: {pe}", flush=True)
-    try:
-        from bot.clone_panel import ClonePanelView
-        bot.add_view(ClonePanelView())
-        print("  [+] Registered persistent ClonePanelView into Bot.", flush=True)
-    except Exception as cpe:
-        print(f"  [-] Notice on ClonePanelView registration: {cpe}", flush=True)
-    try:
-        from bot.deobf_panel import DeobfResultActionView
-        bot.add_view(DeobfResultActionView())
-        print("  [+] Registered persistent DeobfResultActionView into Bot.", flush=True)
-    except Exception as re_view_err:
-        print(f"  [-] Notice on DeobfResultActionView registration: {re_view_err}", flush=True)
+    if not _views_registered:
+        try:
+            bot.add_view(DeobfPanelView())
+            print("  [+] Registered persistent DeobfPanelView into Bot.", flush=True)
+        except Exception as pe:
+            print(f"  [-] Notice on DeobfPanelView registration: {pe}", flush=True)
+        try:
+            from bot.clone_panel import ClonePanelView
+            bot.add_view(ClonePanelView())
+            print("  [+] Registered persistent ClonePanelView into Bot.", flush=True)
+        except Exception as cpe:
+            print(f"  [-] Notice on ClonePanelView registration: {cpe}", flush=True)
+        try:
+            from bot.deobf_panel import DeobfResultActionView
+            bot.add_view(DeobfResultActionView())
+            print("  [+] Registered persistent DeobfResultActionView into Bot.", flush=True)
+        except Exception as re_view_err:
+            print(f"  [-] Notice on DeobfResultActionView registration: {re_view_err}", flush=True)
+        _views_registered = True
     user_tag = f"{bot.user.name}#{bot.user.discriminator}" if bot.user.discriminator != "0" else bot.user.name
     print(f"👤 Logged in as: {user_tag} (ID: {bot.user.id})")
     print(f"🤖 Gemini AI Status: {'🟢 ONLINE (' + config.GEMINI_MODEL + ')' if gemini_engine.is_available() else '🔴 OFFLINE'}")
@@ -691,21 +698,23 @@ async def on_ready():
     print(f"🔗 ลิงก์เชิญบอทเข้า Discord:\n   {invite_url}")
     print("=" * 64)
 
-    for guild in bot.guilds:
-        try:
-            guild_cmds = await bot.tree.fetch_commands(guild=guild)
-            if guild_cmds:
-                bot.tree.clear_commands(guild=guild)
-                await bot.tree.sync(guild=guild)
-                print(f"[+] Cleared {len(guild_cmds)} duplicate guild commands from {guild.name} ({guild.id}).", flush=True)
-        except Exception as ge:
-            print(f"[-] Guild command cleanup notice for {guild.id}: {ge}", flush=True)
+    if not _commands_synced:
+        for guild in bot.guilds:
+            try:
+                guild_cmds = await bot.tree.fetch_commands(guild=guild)
+                if guild_cmds:
+                    bot.tree.clear_commands(guild=guild)
+                    await bot.tree.sync(guild=guild)
+                    print(f"[+] Cleared {len(guild_cmds)} duplicate guild commands from {guild.name} ({guild.id}).", flush=True)
+            except Exception as ge:
+                print(f"[-] Guild command cleanup notice for {guild.id}: {ge}", flush=True)
 
-    try:
-        synced = await bot.tree.sync()
-        print(f"[+] Synced {len(synced)} global slash commands for AI & Deobf Bot.", flush=True)
-    except Exception as e:
-        print(f"[-] Global slash sync notice: {e}", flush=True)
+        try:
+            synced = await bot.tree.sync()
+            print(f"[+] Synced {len(synced)} global slash commands for AI & Deobf Bot.", flush=True)
+            _commands_synced = True
+        except Exception as e:
+            print(f"[-] Global slash sync notice: {e}", flush=True)
 
     runtime_status = runtime_guard.check_runtime()
     print(f"[RUNTIME CHECK] Python={runtime_status['python']['version']} | audioop={'OK' if runtime_status['audioop']['available'] else 'FAIL'} | discord_compatible={runtime_status['discord_compatible']}", flush=True)
@@ -2088,7 +2097,7 @@ async def cmd_slash_obfuscate(
     except Exception as e:
         safe_err = security.sanitize_output_text(str(e), config.DISCORD_AI_BOT_TOKEN)
         embed = discord.Embed(
-            title="⚡ PAYOMBOYZ Security (Sentinel Engine v4.2) | ❌ เกิดข้อผิดพลาด",
+            title="⚡ PAYOMBOYZ Security (Sentinel Engine v4.3) | ❌ เกิดข้อผิดพลาด",
             description=f"เกิดข้อผิดพลาดระหว่างประมวลผล:\n```\n{safe_err[:500]}\n```",
             color=discord.Color.red()
         )
@@ -2200,9 +2209,9 @@ async def cmd_slash_help(interaction: discord.Interaction):
         inline=False
     )
     embed.add_field(
-        name="🔒 คำสั่ง Obfuscator (Sentinel Engine v4.2)",
-        value="• `/obfuscate [file/code] [engine]` : เข้ารหัสและป้องกันสคริปต์ด้วย Sentinel Engine v4.2 (payomboyzcreative.online)\n"
-              "• เอนจินที่รองรับ: Level 3: Maximum Armor (Sentinel Engine v4.2), Level 2: Balanced Security, Level 1: Fast CFF",
+        name="🔒 คำสั่ง Obfuscator (Sentinel Engine v4.3)",
+        value="• `/obfuscate [file/code] [engine]` : เข้ารหัสและป้องกันสคริปต์ด้วย Sentinel Engine v4.3 (payomboyzcreative.online)\n"
+              "• เอนจินที่รองรับ: Level 3: Maximum Armor (Sentinel Engine v4.3), Level 2: Balanced Security, Level 1: Fast CFF",
         inline=False
     )
     embed.add_field(
@@ -3954,13 +3963,46 @@ async def on_message(message: discord.Message):
                 )
 
 
+def _write_cooldown_marker(reason: str, seconds: int = 600):
+    sup_dir = os.environ.get("HUB_SUPERVISOR_DIR")
+    if not sup_dir:
+        return
+    try:
+        from bot.hub_runtime import atomic_json
+        atomic_json(Path(sup_dir) / "cooldown.json", {"reason": reason, "seconds": int(seconds), "pid": os.getpid()})
+    except Exception:
+        pass
+
+
 def start_ai_bot(token: Optional[str] = None):
     bot_token = token or config.DISCORD_AI_BOT_TOKEN or config.DISCORD_BOT_TOKEN
     if not bot_token:
-        print("[ERROR] No Discord Token provided for AI & Deobf Bot (DISCORD_AI_BOT_TOKEN).")
-        return
-    print(f"[*] Starting AI & Deobfuscator Bot...")
-    bot.run(bot_token)
+        print("[ERROR] No Discord Token provided for AI & Deobf Bot (DISCORD_AI_BOT_TOKEN).", flush=True)
+        sys.exit(2)
+    print("[*] Starting AI & Deobfuscator Bot...", flush=True)
+    try:
+        bot.run(bot_token)
+    except discord.HTTPException as exc:
+        raw_text = str(getattr(exc, "text", "") or str(exc))
+        compact = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", raw_text)).strip()[:240]
+        is_rl = getattr(exc, "status", 0) == 429 or "1015" in raw_text or "cloudflare" in raw_text.lower() or "rate limit" in raw_text.lower()
+        print(f"[AI BOT HTTP ERROR] status={getattr(exc, 'status', '?')} detail={compact}", file=sys.stderr, flush=True)
+        if is_rl:
+            _write_cooldown_marker("discord-http-429-or-cf1015", seconds=600)
+            sys.exit(10)
+        sys.exit(1)
+    except discord.LoginFailure as exc:
+        print(f"[AI BOT AUTH ERROR] Invalid token or login rejected: {exc}", file=sys.stderr, flush=True)
+        _write_cooldown_marker("discord-login-failure", seconds=900)
+        sys.exit(10)
+    except Exception as exc:
+        raw = str(exc)
+        is_rl = "1015" in raw or "429" in raw or "cloudflare" in raw.lower()
+        print(f"[AI BOT FATAL] {type(exc).__name__}: {raw[:300]}", file=sys.stderr, flush=True)
+        if is_rl:
+            _write_cooldown_marker("discord-rate-limit", seconds=600)
+            sys.exit(10)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
