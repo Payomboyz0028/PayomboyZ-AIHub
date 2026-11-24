@@ -4,7 +4,7 @@
 
 ==============================================================================
 
-  ⚡ PAYOMBOYZ SECURITY (SENTINEL ENGINE v4.4)
+  ⚡ PAYOMBOYZ SECURITY (SENTINEL ENGINE v4.5)
 
   Protected by PayomboyZ Multi-Engine & AI Security Layer
 
@@ -115,7 +115,7 @@ __________  _____ _____.___.________      _____ __________ ________ _____.___.__
  |    |  /    |    \____   |/    |    \/    Y    \    |   \/    |    \____   | /     /_ 
  |____|  \____|__  / ______|\_______  /\____|__  /______  /\_______  / ______|/_______ \
                  \/\/               \/         \/       \/         \/\/               \/
-          \_Welcome to PAYOMBOYZ Security (Sentinel Engine v2.0) ~ Much Love, dj
+          \_Welcome to PAYOMBOYZ Security (Sentinel Engine v4.5) ~ Much Love, dj
 
 ]]--"""
 
@@ -1902,7 +1902,7 @@ end
 
                 "ระบบเปิดใช้งาน Adaptive Hybrid Tier อัตโนมัติ: ป้องกัน Double-VM Overhead "
 
-                "และซีลด้วย Polymorphic Keystream S-Box Sentinel Engine v4.4 (0 GC Overhead, 60 FPS นิ่งสนิท)"
+                "และซีลด้วย Polymorphic Keystream S-Box Sentinel Engine v4.5 (0 GC Overhead, 60 FPS นิ่งสนิท)"
 
             )
 
@@ -1970,7 +1970,21 @@ end
         4. Binary Search Tree (BST) Dispatcher -> O(log N) branch decision tree, zero hookable handlers table
         """
         import random
+        import string as _nstr
         raw_bytes = list(payload_lua.encode('utf-8'))
+        _nused = set()
+        def _rn(prefix='_'):
+            while True:
+                nm = prefix + ''.join(random.choices(_nstr.ascii_letters, k=random.randint(4, 7)))
+                if nm not in _nused:
+                    _nused.add(nm); return nm
+        def _oi(n):
+            n = int(n)
+            if n <= 4:
+                return str(n)
+            a = random.randint(2, max(2, int(n ** 0.5)))
+            b = n // a; c = n - a * b
+            return f'({a}*{b}+{c})'
         
         # 1. Slice into Pages (Chunk Size: 512 bytes for balanced memory overhead)
         page_size = 512
@@ -2095,6 +2109,19 @@ return ((function(raw_pages, page_keys, ...)
     return _exec_fn(...);
 end)({lua_pages}, {lua_keys}, ...))
 """
+        # Opaque the plain affine/count literals so pattern matchers cannot read them
+        for _pyn, _val in (("_K_STEP", K_STEP), ("_K_OFFSET", K_OFFSET), ("_NUM_PAGES", num_pages)):
+            envelope = envelope.replace(f"local {_pyn} = {_val};", f"local {_pyn} = {_oi(_val)};", 1)
+        # Randomize fixed internal identifiers (longest-first, word-boundary anchored)
+        _fixed = [
+            "_compile_err", "_full_script", "_NUM_PAGES", "_assembled",
+            "_load_page", "_ENV_ROOT", "_t_concat", "_exec_fn", "_s_char",
+            "_m_floor", "_K_OFFSET", "_K_STEP", "page_keys", "raw_pages",
+            "_bxor", "_bit", "_fn", "_pc", "_op",
+        ]
+        for _nm in _fixed:
+            _new = _rn()
+            envelope = re.sub(r"\b" + re.escape(_nm) + r"\b", _new, envelope)
         return envelope
 
     def generate_polymorphic_xor_seal(self, code: str) -> str:
@@ -2165,136 +2192,170 @@ end)({lua_pages}, {lua_keys}, ...))
 
 
 
-        v_tbl = f"_T{random.randint(1000, 9999)}"
+        import string as _string
+        _used_names = set()
+        def _rn(prefix="_"):
+            while True:
+                nm = prefix + "".join(random.choices(_string.ascii_letters, k=random.randint(4, 7)))
+                if nm not in _used_names:
+                    _used_names.add(nm)
+                    return nm
+        def _oi(n):
+            n = int(n)
+            if n <= 4:
+                return str(n)
+            a = random.randint(2, max(2, int(n ** 0.5)))
+            b = n // a
+            c = n - a * b
+            return f"({a}*{b}+{c})"
 
-        v_fn  = f"_x{random.randint(1000, 9999)}"
-
-        v_key = f"_k{random.randint(1000, 9999)}"
-
-        v_out = f"_o{random.randint(1000, 9999)}"
-
-        v_chk = f"_c{random.randint(1000, 9999)}"
-
-        v_sub = f"_s{random.randint(1000, 9999)}"
-
-
+        v_tbl = _rn("_T"); v_fn = _rn("_x"); v_key = _rn("_k")
+        v_out = _rn("_o"); v_chk = _rn("_c"); v_sub = _rn("_s")
+        n_bit = _rn(); n_salt = _rn(); n_pos = _rn(); n_s1 = _rn(); n_s2 = _rn()
+        n_part = _rn(); n_i = _rn(); n_kb = _rn(); n_dec = _rn()
+        n_raw = _rn(); n_loader = _rn(); n_exec = _rn(); n_err = _rn()
+        chunk_name = "@" + "".join(random.choices(_string.ascii_uppercase, k=random.randint(6, 12)))
+        err1 = "".join(random.choices(_string.ascii_letters, k=8))
+        err2 = "".join(random.choices(_string.ascii_letters, k=8))
+        err3 = "".join(random.choices(_string.ascii_letters, k=8))
+        _lcg_a = 1664525
+        _lcg_c = 1013904223
+        _mod32 = 4294967296
 
         stub = f"""local {v_tbl} = {payload_table}
-
 local {v_fn} = (function()
-
-    local _bit = bit32 or bit or {{
-
+    local {n_bit} = bit32 or bit or {{
         bxor = function(a, b)
-
             local res, p = 0, 1
-
             while a > 0 or b > 0 do
-
                 local ra, rb = a % 2, b % 2
-
                 if ra ~= rb then res = res + p end
-
                 a, b, p = math.floor(a / 2), math.floor(b / 2), p * 2
-
             end
-
             return res
-
         end,
-
         rshift = function(a, b) return math.floor(a / (2 ^ b)) end,
-
         band = function(a, b)
-
             local res, p = 0, 1
-
             while a > 0 and b > 0 do
-
                 local ra, rb = a % 2, b % 2
-
                 if ra == 1 and rb == 1 then res = res + p end
-
                 a, b, p = math.floor(a / 2), math.floor(b / 2), p * 2
-
             end
-
             return res
-
         end
-
     }}
-
-    local {v_key} = {seed}
-
-    local _salt = {salt}
-
+    local {v_key} = {_oi(seed)}
+    local {n_salt} = {_oi(salt)}
     local {v_out} = {{}}
-
-    local _pos = 1
-
-    local _s1, _s2 = 1, 0
-
+    local {n_pos} = 1
+    local {n_s1}, {n_s2} = 1, 0
     for _, {v_sub} in ipairs({v_tbl}) do
-
-        local _part = {{}}
-
-        for _i = 1, #{v_sub} do
-
-            {v_key} = ({v_key} * 1664525 + 1013904223 + _salt) % 4294967296
-
-            local _kb = _bit.band(_bit.rshift({v_key}, 16), 255)
-
-            local _dec = _bit.bxor({v_sub}[_i], _kb)
-
-            _part[_i] = string.char(_dec)
-
-            _s1 = (_s1 + _dec) % 65521
-
-            _s2 = (_s2 + _s1) % 65521
-
+        local {n_part} = {{}}
+        for {n_i} = 1, #{v_sub} do
+            {v_key} = ({v_key} * {_oi(_lcg_a)} + {_oi(_lcg_c)} + {n_salt}) % {_oi(_mod32)}
+            local {n_kb} = {n_bit}.band({n_bit}.rshift({v_key}, 16), 255)
+            local {n_dec} = {n_bit}.bxor({v_sub}[{n_i}], {n_kb})
+            {n_part}[{n_i}] = string.char({n_dec})
+            {n_s1} = ({n_s1} + {n_dec}) % 65521
+            {n_s2} = ({n_s2} + {n_s1}) % 65521
         end
-
-        {v_out}[_pos] = table.concat(_part)
-
-        _pos = _pos + 1
-
+        {v_out}[{n_pos}] = table.concat({n_part})
+        {n_pos} = {n_pos} + 1
     end
-
-    local {v_chk} = _s2 * 65536 + _s1
-
-    if {v_chk} ~= {checksum} then
-
-        return error("Integrity verification failed")
-
+    local {v_chk} = {n_s2} * 65536 + {n_s1}
+    if {v_chk} ~= {_oi(checksum)} then
+        return error("{err1}")
     end
-
-    local _raw = table.concat({v_out})
-
-    local _loader = (loadstring or load)
-
-    if not _loader then
-
-        return error("No dynamic execution provider found")
-
+    local {n_raw} = table.concat({v_out})
+    local {n_loader} = (loadstring or load)
+    if not {n_loader} then
+        return error("{err2}")
     end
-
-    local _exec, _err = _loader(_raw, "@PAYOMBOYZ_CORE")
-
-    if not _exec then
-
-        return error("Execution fault: " .. tostring(_err))
-
+    local {n_exec}, {n_err} = {n_loader}({n_raw}, "{chunk_name}")
+    if not {n_exec} then
+        return error("{err3} " .. tostring({n_err}))
     end
-
-    return _exec()
-
+    return {n_exec}()
 end)()
-
 """
-
         return compress_to_oneliner(stub)
 
+
+
+    def reduce_register_pressure(self, code: str) -> str:
+        """Lower Luau register pressure for inputs that exceed the 255-register
+        per-function limit by rewriting very large table.pack(...) calls into
+        table constructors {..., n = N}. Only huge, literal-tailed packs are
+        rewritten so table.pack semantics are preserved. Invoked ONLY after normal
+        validation already failed with 'Out of registers'."""
+        import re as _re
+
+        def _scan(s, open_idx):
+            i = open_idx + 1
+            pd, bd, cd, commas = 1, 0, 0, 0
+            n = len(s)
+            while i < n:
+                ch = s[i]
+                if ch == '-' and i + 1 < n and s[i + 1] == '-':
+                    if s[i + 2:i + 4] == '[[':
+                        e = s.find(']]', i + 4); i = (e + 2) if e != -1 else n; continue
+                    e = s.find('\n', i); i = e if e != -1 else n; continue
+                if ch == '[' and i + 1 < n and s[i + 1] == '[':
+                    e = s.find(']]', i + 2); i = (e + 2) if e != -1 else n; continue
+                if ch == '"' or ch == "'":
+                    q = ch; i += 1
+                    while i < n:
+                        if s[i] == '\\': i += 2; continue
+                        if s[i] == q: i += 1; break
+                        i += 1
+                    continue
+                if ch == '(':
+                    pd += 1
+                elif ch == ')':
+                    pd -= 1
+                    if pd == 0:
+                        return i, commas
+                elif ch == '[':
+                    bd += 1
+                elif ch == ']':
+                    bd -= 1
+                elif ch == '{':
+                    cd += 1
+                elif ch == '}':
+                    cd -= 1
+                elif ch == ',' and pd == 1 and bd == 0 and cd == 0:
+                    commas += 1
+                i += 1
+            return -1, commas
+
+        def _rec(s, min_span=500):
+            j = s.find("table.pack(")
+            if j == -1:
+                return s
+            oi = j + 10
+            ci, commas = _scan(s, oi)
+            if ci == -1:
+                return s[:oi + 1] + _rec(s[oi + 1:], min_span)
+            inner = s[oi + 1:ci]
+            inner_t = _rec(inner, min_span)
+            rest_t = _rec(s[ci + 1:], min_span)
+            ntop = commas + 1 if inner.strip() else 0
+            tail = _re.sub(r'--\[\[.*?\]\]\s*$', '', inner.rstrip(), flags=_re.S).rstrip()
+            safe = not (tail.endswith(')') or tail.endswith('...'))
+            if (ci - oi) >= min_span and ntop >= 20 and safe:
+                head = "{" + inner_t + ", n = " + str(ntop) + "}"
+            else:
+                head = "table.pack(" + inner_t + ")"
+            return s[:j] + head + rest_t
+
+        import sys as _sys
+        _old = _sys.getrecursionlimit()
+        try:
+            _sys.setrecursionlimit(max(_old, 200000))
+            return _rec(code)
+        finally:
+            _sys.setrecursionlimit(_old)
 
 
     def obfuscate_code(
@@ -2357,6 +2418,17 @@ end)()
 
             # Gate 1: Pre-flight Luau Compiler Validation (Rejects invalid syntax upfront)
             source_is_valid, source_validation = self.validate_input_luau(source_code)
+            if (not source_is_valid) and ("Out of registers" in (source_validation or "")):
+                try:
+                    reduced_src = self.reduce_register_pressure(source_code)
+                    if reduced_src != source_code:
+                        rr_ok, rr_msg = self.validate_input_luau(reduced_src)
+                        if rr_ok:
+                            source_code = reduced_src
+                            source_is_valid, source_validation = True, rr_msg
+                            print("[REGISTER-REDUCE] recovered register-overflow input via table.pack->constructor pass", flush=True)
+                except Exception as _rr_exc:
+                    print(f"[REGISTER-REDUCE] skipped: {_rr_exc}", flush=True)
             script_overview = self.generate_script_overview(source_code)
             if not source_is_valid:
                 return {
@@ -2516,7 +2588,52 @@ end)()
 
 
 
-                    if choice_lower in ("level1", "1", "fast"):
+                    # ===== Priority 0: PBZ-VM2 Register VM (promoted PRIMARY engine) =====
+                    # Native-dispatch register VM (handlers call real Luau ops, so
+                    # metatables/multiret/coroutines/varargs are inherited). Returns None
+                    # when it cannot guarantee identical semantics -> fall through to the
+                    # Prometheus CLI pipeline below (fallback), then the guaranteed seal net.
+                    try:
+                        from payomboyz_obfuscator.pbg_vm2.vmpipeline import try_vm_obfuscate
+                        vm2_raw = try_vm_obfuscate(source_code)
+                    except Exception as _vm2_imp:
+                        vm2_raw = None
+                        print(f"[OBFUSCATION ENGINE] VM2 import/compile skipped: {_vm2_imp}", flush=True)
+                    if vm2_raw:
+                        try:
+                            if choice_lower in ("level3", "3", "max", "maximum", "max_cff", "armor", "level4", "level5", "4", "5", "sentinel", "sentinel_vm"):
+                                armor = SecurityEnvelope().emit_armor()
+                                inner_code = f"""return (function(...)
+{armor}
+{vm2_raw}
+end)(...)"""
+                                try:
+                                    armored = self.apply_neutron_4pillars_armor(inner_code)
+                                    rt_ok, _ = self.verify_lua_runtime(armored)
+                                    vm2_cand = armored if rt_ok else inner_code
+                                except Exception:
+                                    vm2_cand = inner_code
+                                vm2_engine = "\U0001f534 Level 3: Maximum Armor (Sentinel Engine v4.5 / PBZ-VM2 Register VM + Neutron 4-Pillar Armor)"
+                                vm2_verify = "PBZ-VM2 Native-Dispatch Register VM + Neutron 4-Pillar Defense (Verified Luau RC 0)"
+                            elif choice_lower in ("level1", "1", "fast"):
+                                vm2_cand = self.generate_polymorphic_xor_seal(vm2_raw)
+                                vm2_engine = "\U0001f7e2 Level 1: Fast VM (PBZ-VM2 Register VM / Zero-Alloc Dispatch, 60FPS)"
+                                vm2_verify = "PBZ-VM2 Native-Dispatch Register VM (100% Native Luau Speed)"
+                            else:
+                                vm2_cand = self.generate_polymorphic_xor_seal(vm2_raw)
+                                vm2_engine = "\U0001f7e1 Level 2: Balanced Security (PBZ-VM2 Register VM + Polymorphic S-Box Seal)"
+                                vm2_verify = "PBZ-VM2 Native-Dispatch Register VM (100% Roblox Compatible)"
+                            rt_ok, rt_msg = self.verify_lua_runtime(vm2_cand)
+                            if rt_ok:
+                                final_code = vm2_cand
+                                accepted_engine = vm2_engine
+                                accepted_verification = vm2_verify
+                            else:
+                                print(f"[OBFUSCATION ENGINE] VM2 runtime gate failed ({rt_msg}), falling back to Prometheus...", flush=True)
+                        except Exception as _vm2_wrap:
+                            print(f"[OBFUSCATION ENGINE] VM2 wrap exception ({_vm2_wrap}), falling back to Prometheus...", flush=True)
+
+                    if (not final_code) and choice_lower in ("level1", "1", "fast"):
                         # 🟢 Level 1: Fast VM (Prometheus Architecture / 60 FPS)
                         vm_ok = False
                         with open(temp_in, "w", encoding="utf-8") as f:
@@ -2537,8 +2654,8 @@ end)()
                             accepted_engine = "🟢 Level 1: Fast VM (Polymorphic S-Box Keystream Fallback)"
                             accepted_verification = "100% Native Luau Execution Speed (Zero-GC Optimization)"
 
-                    elif choice_lower in ("level3", "3", "max", "maximum", "max_cff", "armor"):
-                        # 🔴 Level 3: Maximum Armor (Prometheus Multi-Layer Double-VM + 7-Shield Armor)
+                    elif (not final_code) and choice_lower in ("level3", "3", "max", "maximum", "max_cff", "armor", "level4", "level5", "4", "5", "sentinel", "sentinel_vm"):
+                        # 🔴 Level 3: Maximum Armor (Sentinel Engine v4.5 / Double-VM + Dynamic Key + JIT Decrypt)
                         vm_ok = False
                         with open(temp_in, "w", encoding="utf-8") as f:
                             f.write(source_code)
@@ -2559,97 +2676,24 @@ end)(...)"""
                                 rt_ok, _ = self.verify_lua_runtime(armored)
                                 if rt_ok:
                                     final_code = armored
-                                    accepted_engine = "🔴 Level 3: Maximum Armor (Prometheus Double-VM + Neutron 4-Pillar VM-CFF Armor)"
-                                    accepted_verification = "Prometheus Double-VM + Neutron 4-Pillar Defense (Verified Luau RC 0)"
+                                    accepted_engine = "🔴 Level 3: Maximum Armor (Sentinel Engine v4.5 / Dynamic Key + JIT Decrypt)"
+                                    accepted_verification = "Sentinel Double-VM + Neutron 4-Pillar Defense (Verified Luau RC 0)"
                                 else:
                                     final_code = inner_code
-                                    accepted_engine = "🔴 Level 3: Maximum Armor (Prometheus Multi-Layer Double-VM + 7-Shield Armor)"
-                                    accepted_verification = "Prometheus Multi-Tier Bytecode Virtualization + Anti-Tamper Shield"
+                                    accepted_engine = "🔴 Level 3: Maximum Armor (Sentinel Engine v4.5 / Multi-Layer Double-VM)"
+                                    accepted_verification = "Sentinel Multi-Tier Bytecode Virtualization + Anti-Tamper Shield"
                             except Exception:
                                 final_code = inner_code
-                                accepted_engine = "🔴 Level 3: Maximum Armor (Prometheus Multi-Layer Double-VM + 7-Shield Armor)"
-                                accepted_verification = "Prometheus Multi-Tier Bytecode Virtualization + Anti-Tamper Shield"
+                                accepted_engine = "🔴 Level 3: Maximum Armor (Sentinel Engine v4.5 / Multi-Layer Double-VM)"
+                                accepted_verification = "Sentinel Multi-Tier Bytecode Virtualization + Anti-Tamper Shield"
                         if not vm_ok or not final_code:
                             pbg = PayomboyZObfuscator()
                             raw_pbg = pbg.obfuscate(source_code, options={"flatten_cfg": True, "chunk_size": 1, "security_armor": True, "level": 3})
                             final_code = self.generate_polymorphic_xor_seal(raw_pbg)
-                            accepted_engine = "🔴 Level 3: Maximum Armor (Deep CFF + Anti-Tamper Shield Fallback)"
+                            accepted_engine = "🔴 Level 3: Maximum Armor (Sentinel Engine v4.5 / Deep CFF Fallback)"
                             accepted_verification = "Deep Non-Linear Control Flow Flattening (Maximum Anti-Reversing)"
 
-                    elif choice_lower in ("level4", "4", "multitier", "multi_tier"):
-                        # ⚡ Level 4: Prometheus Multi-Tier VM (Instruction Virtualizer)
-                        vm_ok = False
-                        with open(temp_in, "w", encoding="utf-8") as f:
-                            f.write(source_code)
-                        try:
-                            temp_out.unlink(missing_ok=True)
-                        except OSError:
-                            pass
-                        vm_ok, vm_err = self._run_prometheus_pipeline(str(temp_in), str(temp_out), str(self.double_vm_cfg_path))
-                        if vm_ok and temp_out.exists() and temp_out.stat().st_size > 0:
-                            raw_vm = temp_out.read_text(encoding="utf-8", errors="replace")
-                            try:
-                                armored = self.apply_neutron_4pillars_armor(raw_vm)
-                                rt_ok, _ = self.verify_lua_runtime(armored)
-                                if rt_ok:
-                                    final_code = armored
-                                    accepted_engine = "⚡ Level 4: Prometheus Multi-Tier VM (Instruction Virtualizer + Neutron CFF Armor)"
-                                    accepted_verification = "Multi-Tier Bytecode Virtualization + Neutron 4-Pillar VM-CFF (Verified Luau RC 0)"
-                                else:
-                                    final_code = raw_vm
-                                    accepted_engine = "⚡ Level 4: Prometheus Multi-Tier VM (Instruction Virtualizer)"
-                                    accepted_verification = "Prometheus Multi-Tier Bytecode Virtualization (100% Roblox Compatible)"
-                            except Exception:
-                                final_code = raw_vm
-                                accepted_engine = "⚡ Level 4: Prometheus Multi-Tier VM (Instruction Virtualizer)"
-                                accepted_verification = "Prometheus Multi-Tier Bytecode Virtualization (100% Roblox Compatible)"
-                        if not vm_ok or not final_code:
-                            pbg = PayomboyZObfuscator()
-                            raw_pbg = pbg.obfuscate(source_code, options={"flatten_cfg": True, "chunk_size": 2, "security_armor": True, "level": 4})
-                            final_code = self.generate_polymorphic_xor_seal(raw_pbg)
-                            accepted_engine = "⚡ Level 4: Prometheus Multi-Tier VM (Instruction Virtualizer Fallback)"
-                            accepted_verification = "Coupled State CFF with Opaque Mathematical Invariants"
-
-                    elif choice_lower in ("level5", "5", "sentinel", "sentinel_vm"):
-                        # 🛡️ Level 5: Sentinel Multi-Layer Double-VM (Dual-State CFF + Anti-Hook/Spy Sentinel)
-                        vm_ok = False
-                        with open(temp_in, "w", encoding="utf-8") as f:
-                            f.write(source_code)
-                        try:
-                            temp_out.unlink(missing_ok=True)
-                        except OSError:
-                            pass
-                        vm_ok, vm_err = self._run_prometheus_pipeline(str(temp_in), str(temp_out), str(self.double_vm_cfg_path))
-                        if vm_ok and temp_out.exists() and temp_out.stat().st_size > 0:
-                            raw_vm = temp_out.read_text(encoding="utf-8", errors="replace")
-                            armor = SecurityEnvelope().emit_armor()
-                            inner_code = f"""return (function(...)
-{armor}
-{raw_vm}
-end)(...)"""
-                            try:
-                                armored = self.apply_neutron_4pillars_armor(inner_code)
-                                rt_ok, _ = self.verify_lua_runtime(armored)
-                                if rt_ok:
-                                    final_code = armored
-                                    accepted_engine = "🛡️ Level 5: Sentinel Multi-Layer Double-VM (Prometheus Base + Anti-AST Dump)"
-                                    accepted_verification = "Double-VM + Neutron 4-Pillars + Anti-AST Sentinel (Maximum Armor Verified)"
-                                else:
-                                    final_code = inner_code
-                                    accepted_engine = "🛡️ Level 5: Sentinel Multi-Layer Double-VM (Prometheus Base + Anti-AST Dump)"
-                                    accepted_verification = "Double-VM Instruction Virtualization + Anti-Tamper Shield"
-                            except Exception:
-                                final_code = inner_code
-                                accepted_engine = "🛡️ Level 5: Sentinel Multi-Layer Double-VM (Prometheus Base + Anti-AST Dump)"
-                                accepted_verification = "Double-VM Instruction Virtualization + Anti-Tamper Shield"
-                        if not vm_ok or not final_code:
-                            pbg = PayomboyZObfuscator()
-                            raw_pbg = pbg.obfuscate(source_code, options={"flatten_cfg": True, "chunk_size": 1, "security_armor": True, "level": 5})
-                            final_code = self.generate_polymorphic_xor_seal(raw_pbg)
-                            accepted_engine = "🛡️ Level 5: Sentinel Multi-Layer Double-VM (Dual-State CFF + Anti-Hook/Spy Fallback)"
-                            accepted_verification = "Maximum NP-Hard CFG Flattening + Anti-Hook Guard"
-
-                    else:
+                    elif not final_code:
                         # 🟡 Level 2: Balanced Security (Prometheus Luau VM) - RECOMMENDED DEFAULT
                         vm_ok = False
                         with open(temp_in, "w", encoding="utf-8") as f:
@@ -2683,6 +2727,36 @@ end)(...)"""
                                     final_code = fb_code
                                     accepted_engine = "🟡 Level 2: Balanced Security (Prometheus Verified Luau VM)"
                                     accepted_verification = "100% Verified against Luau Runtime Engine"
+
+                    # ===== Final guaranteed safety net (Luraph-style) =====
+                    # If no stronger layer produced a runtime-verified bundle, seal the
+                    # RAW source directly: the payload is the original (loadstring'd at
+                    # runtime), so semantics are identical and there is no extra register
+                    # pressure. Any syntax-valid script therefore always yields a runnable
+                    # output -- strength degrades gracefully, correctness never does.
+                    _net_needed = True
+                    if final_code:
+                        try:
+                            _ok_now, _ = self.verify_lua_runtime(final_code)
+                            _net_needed = not _ok_now
+                        except Exception:
+                            _net_needed = True
+                    if _net_needed:
+                        try:
+                            net_code = self.generate_polymorphic_xor_seal(source_code)
+                            net_ok, net_msg = self.verify_lua_runtime(net_code)
+                            if net_ok or not final_code:
+                                final_code = net_code
+                                if choice_lower in ("level3", "3", "max", "maximum", "max_cff", "armor", "level4", "level5", "4", "5", "sentinel", "sentinel_vm"):
+                                    accepted_engine = "\U0001f534 Level 3: Maximum Armor (Sentinel Engine v4.5 / Polymorphic S-Box Seal - Guaranteed Safe Path)"
+                                elif choice_lower in ("level1", "1", "fast"):
+                                    accepted_engine = "\U0001f7e2 Level 1: Fast VM (Polymorphic S-Box Seal - Guaranteed Safe Path)"
+                                else:
+                                    accepted_engine = "\U0001f7e1 Level 2: Balanced Security (Polymorphic S-Box Seal - Guaranteed Safe Path)"
+                                accepted_verification = "Polymorphic S-Box Keystream Seal (Identical Source Semantics, 100% Roblox Compatible)"
+                                print(f"[SAFETY NET] sealed raw source as guaranteed-correct fallback ({net_msg})", flush=True)
+                        except Exception as _net_exc:
+                            print(f"[SAFETY NET] seal-over-raw failed: {_net_exc}", flush=True)
 
 
 

@@ -193,11 +193,9 @@ DEOBF_ENGINES = [
 
 # Engine choices — obfuscate (label, value)
 OBF_ENGINES = [
-    ("🟢 Level 1: Fast VM (Prometheus High Speed / 60 FPS)", "level1"),
-    ("🟡 Level 2: Balanced Security (Prometheus Luau VM - แนะนำ)", "level2"),
-    ("🔴 Level 3: Maximum Armor (Prometheus Multi-Layer Double-VM + 7-Shield Armor)", "level3"),
-    ("⚡ Level 4: Prometheus Multi-Tier VM (Instruction Virtualizer)", "level4"),
-    ("🛡️ Level 5: Sentinel Multi-Layer Double-VM (Dual-State CFF + Anti-Hook/Spy)", "level5"),
+    ("🟢 Level 1: Fast CFF (Sentinel Engine v4.5 / 60 FPS Native)", "level1"),
+    ("🟡 Level 2: Balanced Security (Sentinel Engine v4.5 / แนะนำ)", "level2"),
+    ("🔴 Level 3: Maximum Armor (Sentinel Engine v4.5 / Dynamic Key + JIT Decrypt)", "level3"),
 ]
 
 
@@ -469,8 +467,8 @@ DEFAULT_PANEL_DESCRIPTION = (
 
     "• 📦 Base64 / A7DEV\n\n"
 
-    "**🔒 เอนจินป้องกันโค้ด (Sentinel Engine v4.4)**\n"
-    "• 🔴 Level 3: Maximum Armor (Sentinel Engine v4.4 / Dynamic Key + JIT Decrypt)\n"
+    "**🔒 เอนจินป้องกันโค้ด (Sentinel Engine v4.5)**\n"
+    "• 🔴 Level 3: Maximum Armor (Sentinel Engine v4.5 / Dynamic Key + JIT Decrypt)\n"
     "• 🟡 Level 2: Balanced Security (Coupled CFF State Machine + Register VM)\n"
     "• 🟢 Level 1: Fast CFF (60FPS Native Luau Execution)\n\n"
 
@@ -1145,7 +1143,7 @@ class DeobfuscateModal(discord.ui.Modal, title="PAYOMBOYZ Deobfuscator V10.0"):
 
 
 
-class ObfuscateModal(discord.ui.Modal, title="PAYOMBOYZ Sentinel Engine v4.4"):
+class ObfuscateModal(discord.ui.Modal, title="PAYOMBOYZ Sentinel Engine v4.5"):
     filename_input = discord.ui.TextInput(
         label="ชื่อไฟล์ Output (ไม่บังคับ)",
         placeholder="Protected.lua",
@@ -1274,7 +1272,7 @@ class FileConfigModal(discord.ui.Modal):
         raw_bytes: Optional[bytes] = None,
         engine_choice: Optional[str] = None
     ):
-        modal_title = "PAYOMBOYZ Deobfuscator V10.0" if mode == "deobf" else "PAYOMBOYZ Sentinel Engine v4.4"
+        modal_title = "PAYOMBOYZ Deobfuscator V10.0" if mode == "deobf" else "PAYOMBOYZ Sentinel Engine v4.5"
         super().__init__(title=modal_title)
         self.mode = mode
         self.attachment = attachment
@@ -1485,30 +1483,20 @@ class EphemeralConfigView(discord.ui.View):
         else:
             options = [
                 discord.SelectOption(
-                    label="🟢 Level 1: Fast VM (Prometheus High Speed / 60 FPS)",
+                    label="🟢 Level 1: Fast CFF (Sentinel Engine v4.5 / 60 FPS)",
                     value="level1",
-                    description="Direct Dispatch High-Speed VM (เหมาะกับโค้ดลูป 60FPS)"
+                    description="Zero-GC overhead, 60 FPS Roblox execution, Fast CFF"
                 ),
                 discord.SelectOption(
-                    label="🟡 Level 2: Balanced Security (Prometheus Luau VM - แนะนำ)",
+                    label="🟡 Level 2: Balanced Security (Sentinel Engine v4.5 - แนะนำ)",
                     value="level2",
-                    description="Standard Luau VM + CFF + S-Box Keystream (สมดุลความปลอดภัย)",
+                    description="Luau VM + CFF + S-Box Keystream (สมดุลความเร็วและความปลอดภัย)",
                     default=True
                 ),
                 discord.SelectOption(
-                    label="🔴 Level 3: Maximum Armor (Double-VM + 7-Shield)",
+                    label="🔴 Level 3: Maximum Armor (Sentinel Engine v4.5)",
                     value="level3",
-                    description="Double-VM + Deep CFF + 7-Layer Anti-Tamper Shield"
-                ),
-                discord.SelectOption(
-                    label="⚡ Level 4: Prometheus Multi-Tier VM (Instruction Virtualizer)",
-                    value="level4",
-                    description="Multi-Tier Virtualizer + Neutron 4-Pillar VM-CFF Armor"
-                ),
-                discord.SelectOption(
-                    label="🛡️ Level 5: Sentinel Multi-Layer Double-VM (Anti-Hook/Spy)",
-                    value="level5",
-                    description="Dual-State CFF + Anti-Hook/Spy Sentinel + Anti-AST Dump"
+                    description="Dynamic Runtime Keying + True JIT On-Demand Decrypt + Dual-State CFF"
                 ),
             ]
             placeholder = "🔒 เลือกระดับความปลอดภัย (Obfuscation Level)..."
@@ -2102,30 +2090,20 @@ class OpenConfigModalView(discord.ui.View):
         else:
             options = [
                 discord.SelectOption(
-                    label="🟢 Level 1: Fast VM (Prometheus High Speed / 60 FPS)",
+                    label="🟢 Level 1: Fast CFF (Sentinel Engine v4.5 / 60 FPS)",
                     value="level1",
-                    description="Direct Dispatch High-Speed VM (เหมาะกับโค้ดลูป 60FPS)"
+                    description="Zero-GC overhead, 60 FPS Roblox execution, Fast CFF"
                 ),
                 discord.SelectOption(
-                    label="🟡 Level 2: Balanced Security (Prometheus Luau VM - แนะนำ)",
+                    label="🟡 Level 2: Balanced Security (Sentinel Engine v4.5 - แนะนำ)",
                     value="level2",
-                    description="Standard Luau VM + CFF + S-Box Keystream (สมดุลความปลอดภัย)",
+                    description="Luau VM + CFF + S-Box Keystream (สมดุลความเร็วและความปลอดภัย)",
                     default=True
                 ),
                 discord.SelectOption(
-                    label="🔴 Level 3: Maximum Armor (Double-VM + 7-Shield)",
+                    label="🔴 Level 3: Maximum Armor (Sentinel Engine v4.5)",
                     value="level3",
-                    description="Double-VM + Deep CFF + 7-Layer Anti-Tamper Shield"
-                ),
-                discord.SelectOption(
-                    label="⚡ Level 4: Prometheus Multi-Tier VM (Instruction Virtualizer)",
-                    value="level4",
-                    description="Multi-Tier Virtualizer + Neutron 4-Pillar VM-CFF Armor"
-                ),
-                discord.SelectOption(
-                    label="🛡️ Level 5: Sentinel Multi-Layer Double-VM (Anti-Hook/Spy)",
-                    value="level5",
-                    description="Dual-State CFF + Anti-Hook/Spy Sentinel + Anti-AST Dump"
+                    description="Dynamic Runtime Keying + True JIT On-Demand Decrypt + Dual-State CFF"
                 ),
             ]
             placeholder = "🔒 เลือกระดับความปลอดภัย (Obfuscation Level)..."
@@ -2222,7 +2200,7 @@ class PanelDirectModalView(discord.ui.View):
             placeholder = "⚙️ เลือก Deobfuscator Engine..."
         else:
             options = [
-                discord.SelectOption(label="🔴 Level 3: Maximum Armor (แนะนำ)", value="level3", description="Sentinel Engine v4.4 (Dynamic Key + JIT Decrypt)", default=True),
+                discord.SelectOption(label="🔴 Level 3: Maximum Armor (แนะนำ)", value="level3", description="Sentinel Engine v4.5 (Dynamic Key + JIT Decrypt)", default=True),
                 discord.SelectOption(label="🟡 Level 2: Balanced Security", value="level2", description="Register VM + S-Box Keystream Fallback"),
                 discord.SelectOption(label="🟢 Level 1: Fast CFF", value="level1", description="Fast Register VM (60 FPS Native Luau)"),
             ]

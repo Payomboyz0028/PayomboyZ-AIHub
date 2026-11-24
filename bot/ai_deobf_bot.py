@@ -598,8 +598,8 @@ def build_obfuscate_embed(res: dict, input_name: str) -> tuple[discord.Embed, li
     verified = res.get("verified", True)
 
     embed = discord.Embed(
-        title="⚡ PAYOMBOYZ Security (Sentinel Engine v4.4) | ✅ เข้ารหัสและป้องกันสำเร็จ",
-        description=f"สคริปต์ `{safe_input_name}` ได้รับการป้องกันผ่านสถาปัตยกรรม **PAYOMBOYZ Security (Sentinel Engine v4.4)** เรียบร้อยแล้ว รองรับ Executor และภาษาไทย 100%",
+        title="⚡ PAYOMBOYZ Security (Sentinel Engine v4.5) | ✅ เข้ารหัสและป้องกันสำเร็จ",
+        description=f"สคริปต์ `{safe_input_name}` ได้รับการป้องกันผ่านสถาปัตยกรรม **PAYOMBOYZ Security (Sentinel Engine v4.5)** เรียบร้อยแล้ว รองรับ Executor และภาษาไทย 100%",
         color=discord.Color.purple()
     )
 
@@ -632,7 +632,7 @@ def build_obfuscate_embed(res: dict, input_name: str) -> tuple[discord.Embed, li
     if script_summary:
         embed.add_field(name="📝 สรุปการทำงานของสคริปต์ (Script Overview)", value=script_summary, inline=False)
 
-    embed.set_footer(text="PAYOMBOYZ Security (Sentinel Engine v4.4) • payomboyzcreative.online")
+    embed.set_footer(text="PAYOMBOYZ Security (Sentinel Engine v4.5) • payomboyzcreative.online")
 
     output_path = res.get("output_path")
     obf_code = res.get("obfuscated_code", "")
@@ -2046,11 +2046,9 @@ async def cmd_slash_reverse(
     engine="เลือกเอนจินการเข้ารหัส (แนะนำ: Recommended สำหรับเข้ารหัสหลายชั้น)"
 )
 @app_commands.choices(engine=[
-    app_commands.Choice(name="🟢 Level 1: Fast VM (Prometheus High Speed / 60 FPS)", value="level1"),
-    app_commands.Choice(name="🟡 Level 2: Balanced Security (Prometheus Luau VM - แนะนำ)", value="level2"),
-    app_commands.Choice(name="🔴 Level 3: Maximum Armor (Prometheus Multi-Layer Double-VM + 7-Shield Armor)", value="level3"),
-    app_commands.Choice(name="⚡ Level 4: Prometheus Multi-Tier VM (Instruction Virtualizer)", value="level4"),
-    app_commands.Choice(name="🛡️ Level 5: Sentinel Multi-Layer Double-VM (Dual-State CFF + Anti-Hook/Spy)", value="level5")
+    app_commands.Choice(name="🟢 Level 1: Fast CFF (Sentinel Engine v4.5 / 60 FPS Native)", value="level1"),
+    app_commands.Choice(name="🟡 Level 2: Balanced Security (Sentinel Engine v4.5 - แนะนำ)", value="level2"),
+    app_commands.Choice(name="🔴 Level 3: Maximum Armor (Sentinel Engine v4.5 / Dynamic Key + JIT Decrypt)", value="level3"),
 ])
 async def cmd_slash_obfuscate(
     interaction: discord.Interaction,
@@ -2097,7 +2095,7 @@ async def cmd_slash_obfuscate(
     except Exception as e:
         safe_err = security.sanitize_output_text(str(e), config.DISCORD_AI_BOT_TOKEN)
         embed = discord.Embed(
-            title="⚡ PAYOMBOYZ Security (Sentinel Engine v4.4) | ❌ เกิดข้อผิดพลาด",
+            title="⚡ PAYOMBOYZ Security (Sentinel Engine v4.5) | ❌ เกิดข้อผิดพลาด",
             description=f"เกิดข้อผิดพลาดระหว่างประมวลผล:\n```\n{safe_err[:500]}\n```",
             color=discord.Color.red()
         )
@@ -2209,9 +2207,9 @@ async def cmd_slash_help(interaction: discord.Interaction):
         inline=False
     )
     embed.add_field(
-        name="🔒 คำสั่ง Obfuscator (Sentinel Engine v4.4)",
-        value="• `/obfuscate [file/code] [engine]` : เข้ารหัสและป้องกันสคริปต์ด้วย Sentinel Engine v4.4 (payomboyzcreative.online)\n"
-              "• เอนจินที่รองรับ: Level 3: Maximum Armor (Sentinel Engine v4.4), Level 2: Balanced Security, Level 1: Fast CFF",
+        name="🔒 คำสั่ง Obfuscator (Sentinel Engine v4.5)",
+        value="• `/obfuscate [file/code] [engine]` : เข้ารหัสและป้องกันสคริปต์ด้วย Sentinel Engine v4.5 (payomboyzcreative.online)\n"
+              "• เอนจินที่รองรับ: Level 3: Maximum Armor (Sentinel Engine v4.5), Level 2: Balanced Security, Level 1: Fast CFF",
         inline=False
     )
     embed.add_field(
