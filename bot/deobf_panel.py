@@ -193,9 +193,9 @@ DEOBF_ENGINES = [
 
 # Engine choices — obfuscate (label, value)
 OBF_ENGINES = [
-    ("🟢 Level 1: Fast CFF (Sentinel Engine v4.5 / 60 FPS Native)", "level1"),
-    ("🟡 Level 2: Balanced Security (Sentinel Engine v4.5 / แนะนำ)", "level2"),
-    ("🔴 Level 3: Maximum Armor (Sentinel Engine v4.5 / Dynamic Key + JIT Decrypt)", "level3"),
+    ("🟢 Level 1: OPAL Fast (Sentinel Engine v5.1 APEX / 60-120FPS Zero-Lag)", "level1"),
+    ("🟡 Level 2: OPAL+ Balanced (Sentinel Engine v5.1 APEX / CFF + Self-Wipe - แนะนำ)", "level2"),
+    ("🔴 Level 3: ONYX Maximum Armor (Sentinel Engine v5.1 APEX / Dual-Mode MBA + Tier-A Native)", "level3"),
 ]
 
 
@@ -467,10 +467,10 @@ DEFAULT_PANEL_DESCRIPTION = (
 
     "• 📦 Base64 / A7DEV\n\n"
 
-    "**🔒 เอนจินป้องกันโค้ด (Sentinel Engine v4.5)**\n"
-    "• 🔴 Level 3: Maximum Armor (Sentinel Engine v4.5 / Dynamic Key + JIT Decrypt)\n"
-    "• 🟡 Level 2: Balanced Security (Coupled CFF State Machine + Register VM)\n"
-    "• 🟢 Level 1: Fast CFF (60FPS Native Luau Execution)\n\n"
+    "**🔒 เอนจินป้องกันโค้ด (Sentinel Engine v5.1 APEX ONYX / OPAL)**\n"
+    "• 🔴 Level 3: ONYX Maximum Armor (Dual-Mode MBA + Tier-A Native + IEEE-754 -0.0 Self-Wipe)\n"
+    "• 🟡 Level 2: OPAL+ Balanced (Basic-Block CFF + Self-Wipe Root + Sharded Trampolines)\n"
+    "• 🟢 Level 1: OPAL Fast (SoA FASTCALL VM + Tier-A Native Macros, 60-120FPS Zero-Lag)\n\n"
 
     "**💡 วิธีใช้งานผ่านแผงควบคุม(How to Use)**\n"
 
@@ -1143,7 +1143,7 @@ class DeobfuscateModal(discord.ui.Modal, title="PAYOMBOYZ Deobfuscator V10.0"):
 
 
 
-class ObfuscateModal(discord.ui.Modal, title="PAYOMBOYZ Sentinel Engine v4.5"):
+class ObfuscateModal(discord.ui.Modal, title="PAYOMBOYZ Sentinel Engine v5.1 APEX"):
     filename_input = discord.ui.TextInput(
         label="ชื่อไฟล์ Output (ไม่บังคับ)",
         placeholder="Protected.lua",
@@ -1272,7 +1272,7 @@ class FileConfigModal(discord.ui.Modal):
         raw_bytes: Optional[bytes] = None,
         engine_choice: Optional[str] = None
     ):
-        modal_title = "PAYOMBOYZ Deobfuscator V10.0" if mode == "deobf" else "PAYOMBOYZ Sentinel Engine v4.5"
+        modal_title = "PAYOMBOYZ Deobfuscator V10.0" if mode == "deobf" else "PAYOMBOYZ Sentinel Engine v5.1 APEX"
         super().__init__(title=modal_title)
         self.mode = mode
         self.attachment = attachment
@@ -1483,20 +1483,20 @@ class EphemeralConfigView(discord.ui.View):
         else:
             options = [
                 discord.SelectOption(
-                    label="🟢 Level 1: Fast CFF (Sentinel Engine v4.5 / 60 FPS)",
+                    label="🟢 Level 1: OPAL Fast (Sentinel Engine v5.1 APEX / 60-120FPS)",
                     value="level1",
-                    description="Zero-GC overhead, 60 FPS Roblox execution, Fast CFF"
+                    description="SoA FASTCALL VM, Tier-A Native Macros & Masked BST"
                 ),
                 discord.SelectOption(
-                    label="🟡 Level 2: Balanced Security (Sentinel Engine v4.5 - แนะนำ)",
+                    label="🟡 Level 2: OPAL+ Balanced (Sentinel Engine v5.1 APEX - แนะนำ)",
                     value="level2",
-                    description="Luau VM + CFF + S-Box Keystream (สมดุลความเร็วและความปลอดภัย)",
+                    description="Basic-Block CFF + -0.0 Self-Wipe + Sharded Trampolines",
                     default=True
                 ),
                 discord.SelectOption(
-                    label="🔴 Level 3: Maximum Armor (Sentinel Engine v4.5)",
+                    label="🔴 Level 3: ONYX Maximum Armor (Sentinel Engine v5.1 APEX)",
                     value="level3",
-                    description="Dynamic Runtime Keying + True JIT On-Demand Decrypt + Dual-State CFF"
+                    description="Dual-Mode MBA + Tier-A Native + C-Closure Anti-Hook"
                 ),
             ]
             placeholder = "🔒 เลือกระดับความปลอดภัย (Obfuscation Level)..."
@@ -2090,20 +2090,20 @@ class OpenConfigModalView(discord.ui.View):
         else:
             options = [
                 discord.SelectOption(
-                    label="🟢 Level 1: Fast CFF (Sentinel Engine v4.5 / 60 FPS)",
+                    label="🟢 Level 1: OPAL Fast (Sentinel Engine v5.1 APEX / 60-120FPS)",
                     value="level1",
-                    description="Zero-GC overhead, 60 FPS Roblox execution, Fast CFF"
+                    description="SoA FASTCALL VM, Tier-A Native Macros & Masked BST"
                 ),
                 discord.SelectOption(
-                    label="🟡 Level 2: Balanced Security (Sentinel Engine v4.5 - แนะนำ)",
+                    label="🟡 Level 2: OPAL+ Balanced (Sentinel Engine v5.1 APEX - แนะนำ)",
                     value="level2",
-                    description="Luau VM + CFF + S-Box Keystream (สมดุลความเร็วและความปลอดภัย)",
+                    description="Basic-Block CFF + -0.0 Self-Wipe + Sharded Trampolines",
                     default=True
                 ),
                 discord.SelectOption(
-                    label="🔴 Level 3: Maximum Armor (Sentinel Engine v4.5)",
+                    label="🔴 Level 3: ONYX Maximum Armor (Sentinel Engine v5.1 APEX)",
                     value="level3",
-                    description="Dynamic Runtime Keying + True JIT On-Demand Decrypt + Dual-State CFF"
+                    description="Dual-Mode MBA + Tier-A Native + C-Closure Anti-Hook"
                 ),
             ]
             placeholder = "🔒 เลือกระดับความปลอดภัย (Obfuscation Level)..."
@@ -2200,9 +2200,9 @@ class PanelDirectModalView(discord.ui.View):
             placeholder = "⚙️ เลือก Deobfuscator Engine..."
         else:
             options = [
-                discord.SelectOption(label="🔴 Level 3: Maximum Armor (แนะนำ)", value="level3", description="Sentinel Engine v4.5 (Dynamic Key + JIT Decrypt)", default=True),
-                discord.SelectOption(label="🟡 Level 2: Balanced Security", value="level2", description="Register VM + S-Box Keystream Fallback"),
-                discord.SelectOption(label="🟢 Level 1: Fast CFF", value="level1", description="Fast Register VM (60 FPS Native Luau)"),
+                discord.SelectOption(label="🔴 Level 3: ONYX Maximum Armor (แนะนำ)", value="level3", description="Sentinel Engine v5.1 APEX (Dual-Mode MBA + Tier-A Native)", default=True),
+                discord.SelectOption(label="🟡 Level 2: OPAL+ Balanced Security", value="level2", description="Sentinel Engine v5.1 APEX (CFF + -0.0 Self-Wipe)"),
+                discord.SelectOption(label="🟢 Level 1: OPAL Fast", value="level1", description="Sentinel Engine v5.1 APEX (60-120FPS FASTCALL VM)"),
             ]
             placeholder = "🔒 เลือก Obfuscator Engine..."
 

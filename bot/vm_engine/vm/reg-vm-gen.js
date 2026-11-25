@@ -3,6 +3,10 @@ import { randomBytes } from "crypto";
 import { writeFileSync as _dumpWrite } from "fs";
 import { encryptAndEncode } from "./lzma.js";
 import { generateBootstrap } from "./bootstrap-template.js";
+import { buildV5IR } from "./v5-ir-passes.js";
+import { serializeV5Container } from "./v5-serializer.js";
+import { generateV5Lua } from "./v5-codegen.js";
+import { collectNativeStrings } from "./v5-macros-native.js";
 let _rngState = 0;
 function seedRandom(s) {
     _rngState = s >>> 0;
@@ -3256,6 +3260,18 @@ export function generateRegVM(chunk, options = {}) {
     const seed = options.polymorphicSeed || generateDynamicSeed(chunk);
     seedRandom(seed);
     resetNames();
+    if (level !== "debug") {
+        const doCFF = featureEnabled(options, "controlFlowFlattening", true);
+        const nativeFuncs = options.nativeFuncs || [];
+        const extraStrings = collectNativeStrings(nativeFuncs);
+        const { v5Root, ctx } = buildV5IR(chunk, { level, doCFF }, rng);
+        const container = serializeV5Container(v5Root, ctx, rng, extraStrings);
+        return generateV5Lua(container, ctx, {
+            placeId: options.placeId || options.targetPlaceId || 0,
+            robloxOnly: Boolean(options.robloxOnly),
+            nativeFuncs,
+        }, rng);
+    }
     const doShuffle = level !== "debug" && featureEnabled(options, "opcodeShuffle", true);
     const encodeStrings = level !== "debug" && featureEnabled(options, "stringEncoding", true);
     const includeExecutor = options.executorGlobals ?? (level !== "debug");
@@ -3602,12 +3618,12 @@ export function generateRegVM(chunk, options = {}) {
         console.log(`[RegVM] DUMP_RAW: saved ${output.length} chars to debug-vm-raw.lua`);
     }
     // Direct Native Register Virtual Machine output (Zero loadstring at runtime)
-    console.log(`[RegVM] Emitting Sentinel v4.4 Variable-Length Buffer VM + 2-Layer Nested CFF`);
+    console.log(`[RegVM] Emitting Sentinel Engine v5.1 APEX Variable-Length Buffer VM + 2-Layer Nested CFF`);
     output = `return(function(...) ${output} end)(...)`;
     if (!options._noWatermark) {
         const art = [
             "-- ==============================================================================",
-            "--  PAYOMBØYZ SENTINEL PROTOCOL v4.4 -- VARIABLE-LEN BUFFER VM & NESTED CFF",
+            "--  PAYOMBØYZ Sentinel Engine v5.1 APEX -- VARIABLE-LEN BUFFER VM & NESTED CFF",
             "--  Cryptographic Protection: Variable-Width Buffer Bytecode + Rolling Xorshift32 + 2-Layer CFF",
             "--  Tamper Resistance: Dead-Op Wipe, Encrypted Shadow Restore & FNV-1a Anti-Hook Guards",
             "-- =============================================================================="

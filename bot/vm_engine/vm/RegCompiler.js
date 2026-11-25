@@ -1,7 +1,11 @@
 import { RK_OFFSET, RK, regEmit, regPatch, regPC, regAddConst, createRegChunk, regAddProto, } from "./bytecode.js";
 function createCtx(parent) {
+    const chunk = createRegChunk();
+    chunk.tier = "normal";
+    chunk.hasClosures = false;
+    chunk.hasLoops = false;
     return {
-        chunk: createRegChunk(),
+        chunk,
         locals: new Map(),
         nextReg: 0,
         freeReg: 0,
@@ -100,6 +104,9 @@ function emitJump(ctx) {
 }
 function patchJump(ctx, jmpPC, targetPC) {
     regPatch(ctx.chunk, jmpPC * 4, 'B', targetPC - jmpPC - 1);
+    if (targetPC <= jmpPC) {
+        ctx.chunk.hasLoops = true;
+    }
 }
 function constRK(ctx, value) {
     const ki = regAddConst(ctx.chunk, value);
@@ -255,8 +262,9 @@ function compileExpr(ctx, exp, dest) {
         case "FunctionExpression": {
             if (dest === -1)
                 dest = allocTemp(ctx);
-            const protoIdx = compileFunctionBody(ctx, exp.params, exp.body);
+            const protoIdx = compileFunctionBody(ctx, exp.params, exp.body, exp.__pbzTier);
             regEmit(c, 34 /* RegOp.CLOSURE */, dest, protoIdx);
+            c.hasClosures = true;
             return dest;
         }
         case "IfElseExpression":
@@ -588,8 +596,9 @@ function compileCallMultiReg(ctx, exp, base, nResults) {
         compileCall(ctx, exp, base, nResults);
     }
 }
-function compileFunctionBody(ctx, params, body) {
+function compileFunctionBody(ctx, params, body, tier = "normal") {
     const child = createCtx(ctx);
+    child.chunk.tier = tier || "normal";
     let reg = 0;
     let nP = 0;
     let va = false;
@@ -683,8 +692,9 @@ function compileStmt(ctx, stmt) {
         }
         case "LocalFunctionStatement": {
             const reg = allocLocal(ctx, stmt.name);
-            const protoIdx = compileFunctionBody(ctx, stmt.params, stmt.body);
+            const protoIdx = compileFunctionBody(ctx, stmt.params, stmt.body, stmt.__pbzTier);
             regEmit(c, 34 /* RegOp.CLOSURE */, reg, protoIdx);
+            c.hasClosures = true;
             break;
         }
         case "FunctionStatement":
@@ -1060,6 +1070,7 @@ function compileForNumeric(ctx, stmt) {
     const forloopPC = regPC(c);
     const bodyStartPC = forprepPC + 1;
     regEmit(c, 31 /* RegOp.FORLOOP */, counterReg, bodyStartPC - forloopPC - 1);
+    c.hasLoops = true;
     regPatch(c, forprepPC * 4, 'B', forloopPC - forprepPC - 1);
     popLoop(ctx);
     restoreFree(ctx, sv);
@@ -1099,6 +1110,7 @@ function compileForIn(ctx, stmt) {
     const bodyStart = ctx.nextReg;
     pushLoop(ctx, bodyStart);
     regEmit(c, 32 /* RegOp.TFORLOOP */, iterReg, 0, nVars);
+    c.hasLoops = true;
     const jmpEnd = emitJump(ctx);
     for (const st of stmt.body)
         compileStmt(ctx, st);
@@ -1160,11 +1172,12 @@ function compileFuncStmt(ctx, stmt) {
     const params = fn.method
         ? [{ type: "Param", name: "self", loc: stmt.loc }, ...stmt.params]
         : stmt.params;
-    const protoIdx = compileFunctionBody(ctx, params, stmt.body);
+    const protoIdx = compileFunctionBody(ctx, params, stmt.body, stmt.__pbzTier);
     if (fn.method) {
         const obj = compileExpr(ctx, fn.base, -1);
         const closure = allocTemp(ctx);
         regEmit(c, 34 /* RegOp.CLOSURE */, closure, protoIdx);
+        c.hasClosures = true;
         const key = constRK(ctx, fn.method);
         regEmit(c, 8 /* RegOp.SETTABLE */, obj, key, closure);
     }
@@ -1172,10 +1185,12 @@ function compileFuncStmt(ctx, stmt) {
         const localReg = ctx.locals.get(fn.base.name);
         if (localReg !== undefined) {
             regEmit(c, 34 /* RegOp.CLOSURE */, localReg, protoIdx);
+            c.hasClosures = true;
         }
         else {
             const tmp = allocTemp(ctx);
             regEmit(c, 34 /* RegOp.CLOSURE */, tmp, protoIdx);
+            c.hasClosures = true;
             const uv = resolveUpvalue(ctx, fn.base.name);
             if (uv !== null) {
                 regEmit(c, 38 /* RegOp.SETUPVAL */, tmp, uv);
@@ -1189,6 +1204,7 @@ function compileFuncStmt(ctx, stmt) {
         const obj = compileExpr(ctx, fn.base.object, -1);
         const closure = allocTemp(ctx);
         regEmit(c, 34 /* RegOp.CLOSURE */, closure, protoIdx);
+        c.hasClosures = true;
         const key = constRK(ctx, fn.base.property);
         regEmit(c, 8 /* RegOp.SETTABLE */, obj, key, closure);
     }
@@ -1197,6 +1213,7 @@ function compileFuncStmt(ctx, stmt) {
 export function regCompile(ast) {
     const ctx = createCtx();
     ctx.chunk.isVararg = true;
+    ctx.chunk.tier = ast.__pbzTier || "cold";
     for (const stmt of ast.body)
         compileStmt(ctx, stmt);
     const last = ast.body.length > 0 ? ast.body[ast.body.length - 1] : null;

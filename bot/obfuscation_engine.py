@@ -4,11 +4,11 @@
 
 ==============================================================================
 
-  ⚡ PAYOMBOYZ SECURITY (SENTINEL ENGINE v4.5)
+  ⚡ PAYOMBOYZ SECURITY (SENTINEL ENGINE v5.1 APEX ONYX / OPAL)
 
-  Protected by PayomboyZ Multi-Engine & AI Security Layer
+  Protected by PayomboyZ Sentinel Engine v5.1 APEX (Dual-Mode MBA + Tier-A Native + Anti-vmmap BST)
 
-  Architecture: Multi-Layer Virtual Machine & Dynamic Anti-Tamper
+  Architecture: Asymmetric SoA FASTCALL VM, Hardened Tier-A Native & IEEE-754 -0.0 Self-Wipe
 
 ==============================================================================
 
@@ -115,7 +115,7 @@ __________  _____ _____.___.________      _____ __________ ________ _____.___.__
  |    |  /    |    \____   |/    |    \/    Y    \    |   \/    |    \____   | /     /_ 
  |____|  \____|__  / ______|\_______  /\____|__  /______  /\_______  / ______|/_______ \
                  \/\/               \/         \/       \/         \/\/               \/
-          \_Welcome to PAYOMBOYZ Security (Sentinel Engine v4.5) ~ Much Love, dj
+          \_Welcome to PAYOMBOYZ Security (Sentinel Engine v5.1 APEX) ~ Much Love, dj
 
 ]]--"""
 
@@ -542,9 +542,10 @@ class ObfuscationEngine:
         harness = """local _env = (type(getfenv) == "function" and getfenv(0)) or _G
 
 local function _mockInst(cls)
-    local obj = {
+    local props = {
         ClassName = cls or "Instance",
         Name = cls or "Instance",
+        PlaceId = 0,
         Gravity = 196.2,
         FieldOfView = 70,
         WalkSpeed = 16,
@@ -553,44 +554,41 @@ local function _mockInst(cls)
         Health = 100,
         MaxHealth = 100
     }
-    setmetatable(obj, {
-        __index = function(t, k)
-            if k == "Gravity" then return 196.2 end
-            if k == "FieldOfView" then return 70 end
-            if k == "WalkSpeed" then return 16 end
-            if k == "JumpPower" then return 50 end
-            if k == "HipHeight" then return 2 end
-            if k == "Health" or k == "MaxHealth" then return 100 end
-            if k == "Connect" or k == "connect" then
-                return function(self, fn) return { Disconnect = function() end } end
-            end
-            if k == "GetService" or k == "FindService" or k == "WaitForChild" or k == "FindFirstChild" or k == "FindFirstChildOfClass" then
-                return function(self, n) return _mockInst(tostring(n or k)) end
-            end
-            if k == "GetChildren" or k == "GetDescendants" or k == "GetPlayers" then
-                return function(self) return {} end
-            end
-            if k == "FireServer" or k == "InvokeServer" or k == "Destroy" then
-                return function(...) return true end
-            end
-            if k == "CreateWindow" or k == "CreateTab" or k == "AddTab" or k == "Tab" or k == "NewTab"
-               or k == "AddButton" or k == "AddToggle" or k == "AddSlider" or k == "AddDropdown" or k == "AddColorpicker"
-               or k == "Button" or k == "Toggle" or k == "Slider" or k == "Dropdown" or k == "AddSection" or k == "AddParagraph" then
-                return function(...) return _mockInst(tostring(k)) end
-            end
-            if k == "Notify" or k == "Set" or k == "Update" then
-                return function(...) end
-            end
-            return _mockInst(tostring(k))
-        end,
-        __call = function(t, ...)
-            return _mockInst(cls)
-        end,
-        __add = function(a, b) return _mockInst(cls) end,
-        __sub = function(a, b) return _mockInst(cls) end,
-        __mul = function(a, b) return _mockInst(cls) end,
-        __div = function(a, b) return _mockInst(cls) end,
-    })
+    local obj = (type(newproxy) == "function") and newproxy(true) or {}
+    local mt = (type(newproxy) == "function") and getmetatable(obj) or {}
+    mt.__index = function(t, k)
+        if props[k] ~= nil then return props[k] end
+        if k == "Connect" or k == "connect" then
+            return function(self, fn) return { Disconnect = function() end } end
+        end
+        if k == "GetService" or k == "FindService" or k == "WaitForChild" or k == "FindFirstChild" or k == "FindFirstChildOfClass" then
+            return function(self, n) return _mockInst(tostring(n or k)) end
+        end
+        if k == "GetChildren" or k == "GetDescendants" or k == "GetPlayers" then
+            return function(self) return {} end
+        end
+        if k == "FireServer" or k == "InvokeServer" or k == "Destroy" then
+            return function(...) return true end
+        end
+        if k == "CreateWindow" or k == "CreateTab" or k == "AddTab" or k == "Tab" or k == "NewTab"
+           or k == "AddButton" or k == "AddToggle" or k == "AddSlider" or k == "AddDropdown" or k == "AddColorpicker"
+           or k == "Button" or k == "Toggle" or k == "Slider" or k == "Dropdown" or k == "AddSection" or k == "AddParagraph" then
+            return function(...) return _mockInst(tostring(k)) end
+        end
+        if k == "Notify" or k == "Set" or k == "Update" then
+            return function(...) end
+        end
+        return _mockInst(tostring(k))
+    end
+    mt.__newindex = function(t, k, v) props[k] = v end
+    mt.__call = function(t, ...) return _mockInst(cls) end
+    mt.__add = function(a, b) return _mockInst(cls) end
+    mt.__sub = function(a, b) return _mockInst(cls) end
+    mt.__mul = function(a, b) return _mockInst(cls) end
+    mt.__div = function(a, b) return _mockInst(cls) end
+    if type(newproxy) ~= "function" then
+        setmetatable(obj, mt)
+    end
     return obj
 end
 
@@ -950,7 +948,7 @@ end
 
 
 
-        level_flag = "--max" if level == "max" else "--normal"
+        level_flag = "--fast" if level == "fast" else ("--max" if level == "max" else "--normal")
 
         node_bin = self._get_node_binary()
 
@@ -2576,199 +2574,51 @@ end)()
 
 
 
-            # Priority 1: Multi-Tier High-Complexity Architecture (Register VM + Fast CFF)
-
+            # Priority 1: Sentinel Engine v5.1 APEX ONYX / OPAL Native Node VM Architecture
             if use_pbg:
-
                 try:
-
-                    from payomboyz_obfuscator.pbg_obfuscator import PayomboyZObfuscator
-
-                    from payomboyz_obfuscator.pbg_security_envelope import SecurityEnvelope
-
-
-
-                    # ===== Priority 0: PBZ-VM2 Register VM (promoted PRIMARY engine) =====
-                    # Native-dispatch register VM (handlers call real Luau ops, so
-                    # metatables/multiret/coroutines/varargs are inherited). Returns None
-                    # when it cannot guarantee identical semantics -> fall through to the
-                    # Prometheus CLI pipeline below (fallback), then the guaranteed seal net.
+                    with open(temp_in, "w", encoding="utf-8") as f:
+                        f.write(source_code)
                     try:
-                        from payomboyz_obfuscator.pbg_vm2.vmpipeline import try_vm_obfuscate
-                        vm2_raw = try_vm_obfuscate(source_code)
-                    except Exception as _vm2_imp:
-                        vm2_raw = None
-                        print(f"[OBFUSCATION ENGINE] VM2 import/compile skipped: {_vm2_imp}", flush=True)
-                    if vm2_raw:
-                        try:
-                            if choice_lower in ("level3", "3", "max", "maximum", "max_cff", "armor", "level4", "level5", "4", "5", "sentinel", "sentinel_vm"):
-                                armor = SecurityEnvelope().emit_armor()
-                                inner_code = f"""return (function(...)
-{armor}
-{vm2_raw}
-end)(...)"""
-                                try:
-                                    armored = self.apply_neutron_4pillars_armor(inner_code)
-                                    rt_ok, _ = self.verify_lua_runtime(armored)
-                                    vm2_cand = armored if rt_ok else inner_code
-                                except Exception:
-                                    vm2_cand = inner_code
-                                vm2_engine = "\U0001f534 Level 3: Maximum Armor (Sentinel Engine v4.5 / PBZ-VM2 Register VM + Neutron 4-Pillar Armor)"
-                                vm2_verify = "PBZ-VM2 Native-Dispatch Register VM + Neutron 4-Pillar Defense (Verified Luau RC 0)"
-                            elif choice_lower in ("level1", "1", "fast"):
-                                vm2_cand = self.generate_polymorphic_xor_seal(vm2_raw)
-                                vm2_engine = "\U0001f7e2 Level 1: Fast VM (PBZ-VM2 Register VM / Zero-Alloc Dispatch, 60FPS)"
-                                vm2_verify = "PBZ-VM2 Native-Dispatch Register VM (100% Native Luau Speed)"
-                            else:
-                                vm2_cand = self.generate_polymorphic_xor_seal(vm2_raw)
-                                vm2_engine = "\U0001f7e1 Level 2: Balanced Security (PBZ-VM2 Register VM + Polymorphic S-Box Seal)"
-                                vm2_verify = "PBZ-VM2 Native-Dispatch Register VM (100% Roblox Compatible)"
-                            rt_ok, rt_msg = self.verify_lua_runtime(vm2_cand)
+                        temp_out.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+
+                    if choice_lower in ("level1", "1", "fast", "light"):
+                        v5_lvl = "fast"
+                        v5_engine_label = "\U0001f7e2 Level 1: OPAL Fast (Sentinel Engine v5.1 APEX / 60-120FPS Zero-Lag)"
+                        v5_verify_label = "Sentinel v5.1 APEX OPAL SoA FASTCALL VM + Tier-A Native + Anti-vmmap Masked BST"
+                    elif choice_lower in ("level2", "2", "recommended", "default", "balanced", "normal"):
+                        v5_lvl = "normal"
+                        v5_engine_label = "\U0001f7e1 Level 2: OPAL+ Balanced (Sentinel Engine v5.1 APEX / CFF + Self-Wipe)"
+                        v5_verify_label = "Sentinel v5.1 APEX OPAL+ Basic-Block CFF + IEEE-754 -0.0 Self-Wipe + Sharded Trampolines"
+                    else:
+                        v5_lvl = "max"
+                        v5_engine_label = "\U0001f534 Level 3: ONYX Maximum Armor (Sentinel Engine v5.1 APEX / Dual-Mode MBA + Tier-A Native)"
+                        v5_verify_label = "Sentinel v5.1 APEX ONYX Dual-Mode MBA + Tier-A Native + C-Closure Env + Anti-vmmap BST"
+
+                    v5_ok, v5_err = self._run_clyde_pipeline(str(temp_in), str(temp_out), level=v5_lvl)
+                    if v5_ok and temp_out.exists() and temp_out.stat().st_size > 0:
+                        v5_code = temp_out.read_text(encoding="utf-8", errors="replace").strip()
+                        syn_ok, syn_msg = self.verify_lua_syntax(v5_code)
+                        if syn_ok:
+                            rt_ok, rt_msg = self.verify_lua_runtime(v5_code)
                             if rt_ok:
-                                final_code = vm2_cand
-                                accepted_engine = vm2_engine
-                                accepted_verification = vm2_verify
+                                final_code = v5_code
+                                accepted_engine = v5_engine_label
+                                accepted_verification = f"{v5_verify_label} | {rt_msg}"
                             else:
-                                print(f"[OBFUSCATION ENGINE] VM2 runtime gate failed ({rt_msg}), falling back to Prometheus...", flush=True)
-                        except Exception as _vm2_wrap:
-                            print(f"[OBFUSCATION ENGINE] VM2 wrap exception ({_vm2_wrap}), falling back to Prometheus...", flush=True)
+                                last_error = f"Sentinel v5.1 APEX runtime gate failed: {rt_msg}"
+                                print(f"[SENTINEL v5.1 APEX] Runtime check failed ({rt_msg}), trying Prometheus VM fallback...", flush=True)
+                        else:
+                            last_error = f"Sentinel v5.1 APEX syntax check failed: {syn_msg}"
+                    else:
+                        last_error = f"Sentinel v5.1 APEX CLI error: {v5_err}"
+                except Exception as v5_exc:
+                    last_error = f"Sentinel v5.1 APEX exception: {v5_exc}"
+                    print(f"[SENTINEL v5.1 APEX] Exception: {v5_exc}", flush=True)
 
-                    if (not final_code) and choice_lower in ("level1", "1", "fast"):
-                        # 🟢 Level 1: Fast VM (Prometheus Architecture / 60 FPS)
-                        vm_ok = False
-                        with open(temp_in, "w", encoding="utf-8") as f:
-                            f.write(source_code)
-                        try:
-                            temp_out.unlink(missing_ok=True)
-                        except OSError:
-                            pass
-                        vm_ok, vm_err = self._run_prometheus_pipeline(str(temp_in), str(temp_out), str(self.fast_vm_cfg_path))
-                        if vm_ok and temp_out.exists() and temp_out.stat().st_size > 0:
-                            final_code = temp_out.read_text(encoding="utf-8", errors="replace")
-                            accepted_engine = "🟢 Level 1: Fast VM (Prometheus High Speed / 60 FPS)"
-                            accepted_verification = "Prometheus Luau Virtual Machine (Direct Dispatch / Zero-GC)"
-                        if not vm_ok or not final_code:
-                            pbg = PayomboyZObfuscator()
-                            raw_pbg = pbg.obfuscate(source_code, options={"flatten_cfg": True, "chunk_size": 4, "security_armor": False, "level": 1})
-                            final_code = self.generate_polymorphic_xor_seal(raw_pbg)
-                            accepted_engine = "🟢 Level 1: Fast VM (Polymorphic S-Box Keystream Fallback)"
-                            accepted_verification = "100% Native Luau Execution Speed (Zero-GC Optimization)"
-
-                    elif (not final_code) and choice_lower in ("level3", "3", "max", "maximum", "max_cff", "armor", "level4", "level5", "4", "5", "sentinel", "sentinel_vm"):
-                        # 🔴 Level 3: Maximum Armor (Sentinel Engine v4.5 / Double-VM + Dynamic Key + JIT Decrypt)
-                        vm_ok = False
-                        with open(temp_in, "w", encoding="utf-8") as f:
-                            f.write(source_code)
-                        try:
-                            temp_out.unlink(missing_ok=True)
-                        except OSError:
-                            pass
-                        vm_ok, vm_err = self._run_prometheus_pipeline(str(temp_in), str(temp_out), str(self.double_vm_cfg_path))
-                        if vm_ok and temp_out.exists() and temp_out.stat().st_size > 0:
-                            raw_vm = temp_out.read_text(encoding="utf-8", errors="replace")
-                            armor = SecurityEnvelope().emit_armor()
-                            inner_code = f"""return (function(...)
-{armor}
-{raw_vm}
-end)(...)"""
-                            try:
-                                armored = self.apply_neutron_4pillars_armor(inner_code)
-                                rt_ok, _ = self.verify_lua_runtime(armored)
-                                if rt_ok:
-                                    final_code = armored
-                                    accepted_engine = "🔴 Level 3: Maximum Armor (Sentinel Engine v4.5 / Dynamic Key + JIT Decrypt)"
-                                    accepted_verification = "Sentinel Double-VM + Neutron 4-Pillar Defense (Verified Luau RC 0)"
-                                else:
-                                    final_code = inner_code
-                                    accepted_engine = "🔴 Level 3: Maximum Armor (Sentinel Engine v4.5 / Multi-Layer Double-VM)"
-                                    accepted_verification = "Sentinel Multi-Tier Bytecode Virtualization + Anti-Tamper Shield"
-                            except Exception:
-                                final_code = inner_code
-                                accepted_engine = "🔴 Level 3: Maximum Armor (Sentinel Engine v4.5 / Multi-Layer Double-VM)"
-                                accepted_verification = "Sentinel Multi-Tier Bytecode Virtualization + Anti-Tamper Shield"
-                        if not vm_ok or not final_code:
-                            pbg = PayomboyZObfuscator()
-                            raw_pbg = pbg.obfuscate(source_code, options={"flatten_cfg": True, "chunk_size": 1, "security_armor": True, "level": 3})
-                            final_code = self.generate_polymorphic_xor_seal(raw_pbg)
-                            accepted_engine = "🔴 Level 3: Maximum Armor (Sentinel Engine v4.5 / Deep CFF Fallback)"
-                            accepted_verification = "Deep Non-Linear Control Flow Flattening (Maximum Anti-Reversing)"
-
-                    elif not final_code:
-                        # 🟡 Level 2: Balanced Security (Prometheus Luau VM) - RECOMMENDED DEFAULT
-                        vm_ok = False
-                        with open(temp_in, "w", encoding="utf-8") as f:
-                            f.write(source_code)
-                        try:
-                            temp_out.unlink(missing_ok=True)
-                        except OSError:
-                            pass
-                        vm_ok, vm_err = self._run_prometheus_pipeline(str(temp_in), str(temp_out), str(self.standard_vm_cfg_path))
-                        if vm_ok and temp_out.exists() and temp_out.stat().st_size > 0:
-                            final_code = temp_out.read_text(encoding="utf-8", errors="replace")
-                            accepted_engine = "🟡 Level 2: Balanced Security (Prometheus Luau VM)"
-                            accepted_verification = "Prometheus Luau Virtual Machine (100% Roblox Compatible)"
-                        if not vm_ok or not final_code:
-                            pbg = PayomboyZObfuscator()
-                            raw_pbg = pbg.obfuscate(source_code, options={"flatten_cfg": True, "chunk_size": 2, "security_armor": False, "level": 2})
-                            final_code = self.generate_polymorphic_xor_seal(raw_pbg)
-                            accepted_engine = "🟡 Level 2: Balanced Security (Polymorphic S-Box Keystream Fallback)"
-                            accepted_verification = "Balanced State Machine Architecture (100% Roblox Compatible)"
-
-                    # Execution Verification Gate (Verify under Luau runtime)
-                    if final_code:
-                        run_ok, run_msg = self.verify_lua_runtime(final_code)
-                        if not run_ok:
-                            print(f"[VERIFICATION GATE] Runtime check failed ({run_msg}), applying Prometheus Luau verified fallback...", flush=True)
-                            fb_ok, _ = self._run_prometheus_pipeline(str(temp_in), str(temp_out), str(self.standard_vm_cfg_path))
-                            if fb_ok and temp_out.exists():
-                                fb_code = temp_out.read_text(encoding="utf-8", errors="replace")
-                                fb_valid, _ = self.verify_lua_runtime(fb_code)
-                                if fb_valid:
-                                    final_code = fb_code
-                                    accepted_engine = "🟡 Level 2: Balanced Security (Prometheus Verified Luau VM)"
-                                    accepted_verification = "100% Verified against Luau Runtime Engine"
-
-                    # ===== Final guaranteed safety net (Luraph-style) =====
-                    # If no stronger layer produced a runtime-verified bundle, seal the
-                    # RAW source directly: the payload is the original (loadstring'd at
-                    # runtime), so semantics are identical and there is no extra register
-                    # pressure. Any syntax-valid script therefore always yields a runnable
-                    # output -- strength degrades gracefully, correctness never does.
-                    _net_needed = True
-                    if final_code:
-                        try:
-                            _ok_now, _ = self.verify_lua_runtime(final_code)
-                            _net_needed = not _ok_now
-                        except Exception:
-                            _net_needed = True
-                    if _net_needed:
-                        try:
-                            net_code = self.generate_polymorphic_xor_seal(source_code)
-                            net_ok, net_msg = self.verify_lua_runtime(net_code)
-                            if net_ok or not final_code:
-                                final_code = net_code
-                                if choice_lower in ("level3", "3", "max", "maximum", "max_cff", "armor", "level4", "level5", "4", "5", "sentinel", "sentinel_vm"):
-                                    accepted_engine = "\U0001f534 Level 3: Maximum Armor (Sentinel Engine v4.5 / Polymorphic S-Box Seal - Guaranteed Safe Path)"
-                                elif choice_lower in ("level1", "1", "fast"):
-                                    accepted_engine = "\U0001f7e2 Level 1: Fast VM (Polymorphic S-Box Seal - Guaranteed Safe Path)"
-                                else:
-                                    accepted_engine = "\U0001f7e1 Level 2: Balanced Security (Polymorphic S-Box Seal - Guaranteed Safe Path)"
-                                accepted_verification = "Polymorphic S-Box Keystream Seal (Identical Source Semantics, 100% Roblox Compatible)"
-                                print(f"[SAFETY NET] sealed raw source as guaranteed-correct fallback ({net_msg})", flush=True)
-                        except Exception as _net_exc:
-                            print(f"[SAFETY NET] seal-over-raw failed: {_net_exc}", flush=True)
-
-
-
-                except Exception as pbg_err:
-
-                    last_error = f"Architecture suite exception: {pbg_err}"
-
-                    print(f"[OBFUSCATION ENGINE] Suite exception: {pbg_err}", flush=True)
-
-
-
-            # Priority 2: External Prometheus CLI pipelines (100% Clyde-Free)
+            # Priority 2: External Prometheus CLI VM pipeline (if Sentinel v5.1 APEX Node VM unavailable; never degrades to raw loadstring)
             if not final_code:
                 configs = []
                 if engine_choice in ("double_vm", "prometheus", "psu_strong"):
@@ -2847,49 +2697,13 @@ end)(...)"""
 
 
                         # Verify native Luau execution without runtime crashes
-
                         rt_ok, rt_msg = self.verify_lua_runtime(candidate_output)
-
                         if not rt_ok:
-
                             last_error = f"{candidate_engine} ({candidate_label}) failed Luau runtime: {rt_msg}"
-
                             continue
 
-
-
-                        # Inject runtime anti-hook and metamethod trap guard (safe non-blocking)
-
-                        anti_hook_guard = ""
-
-                        if engine_choice in ("level3", "level4", "level5", "armor", "max", "sentinel"):
-
-                            try:
-
-                                armored_code = self.apply_neutron_4pillars_armor(candidate_output)
-
-                                a_ok, a_msg = self.verify_lua_runtime(armored_code)
-
-                                if a_ok:
-
-                                    final_code = armored_code
-
-                                    accepted_engine = f"{candidate_engine} + Neutron 4-Pillar VM-CFF Armor"
-
-                                else:
-
-                                    final_code = candidate_output
-
-                            except Exception:
-
-                                final_code = candidate_output
-
-                        else:
-
-                            final_code = f"{candidate_output}"
-
-                        accepted_engine = accepted_engine if 'final_code' in locals() and final_code != candidate_output else candidate_engine
-
+                        final_code = f"{candidate_output}"
+                        accepted_engine = candidate_engine
                         accepted_verification = f"{output_msg} | {rt_msg}"
 
                         if candidate_label != "source":
@@ -2967,16 +2781,17 @@ end)(...)"""
             # =========================================================================
             # GATE 2: POST-FLIGHT COMPILER VERIFICATION & SINGLE-LINE ARMOR
             # =========================================================================
-            # Attempt safe single-line compression; verify it preserves syntax
-            try:
-                compressed = compress_to_oneliner(final_code)
-                c_ok, _ = self.verify_lua_syntax(compressed)
-                if c_ok:
-                    final_code = compressed
-                else:
-                    print("[!] Single-line compression failed syntax verification, preserving structured bundle", flush=True)
-            except Exception as comp_err:
-                print(f"[!] Single-line compression note: {comp_err}", flush=True)
+            # Attempt safe single-line compression for multi-line fallback output only; Sentinel v5.1 APEX is already single-line
+            if final_code.count("\n") > 3:
+                try:
+                    compressed = compress_to_oneliner(final_code)
+                    c_ok, _ = self.verify_lua_syntax(compressed)
+                    if c_ok:
+                        final_code = compressed
+                    else:
+                        print("[!] Single-line compression failed syntax verification, preserving structured bundle", flush=True)
+                except Exception as comp_err:
+                    print(f"[!] Single-line compression note: {comp_err}", flush=True)
 
             # Prepend stylish PAYOMBOYZ ASCII Art Banner (matching LuaObfuscator / Ferib style)
             if OBFUSCATION_HEADER and not final_code.startswith("--[["):

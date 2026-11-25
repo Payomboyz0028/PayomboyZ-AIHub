@@ -598,8 +598,8 @@ def build_obfuscate_embed(res: dict, input_name: str) -> tuple[discord.Embed, li
     verified = res.get("verified", True)
 
     embed = discord.Embed(
-        title="⚡ PAYOMBOYZ Security (Sentinel Engine v4.5) | ✅ เข้ารหัสและป้องกันสำเร็จ",
-        description=f"สคริปต์ `{safe_input_name}` ได้รับการป้องกันผ่านสถาปัตยกรรม **PAYOMBOYZ Security (Sentinel Engine v4.5)** เรียบร้อยแล้ว รองรับ Executor และภาษาไทย 100%",
+        title="⚡ PAYOMBOYZ Security (Sentinel Engine v5.1 APEX ONYX) | ✅ เข้ารหัสและป้องกันสำเร็จ",
+        description=f"สคริปต์ `{safe_input_name}` ได้รับการป้องกันผ่านสถาปัตยกรรม **PAYOMBOYZ Security (Sentinel Engine v5.1 APEX ONYX/OPAL)** เรียบร้อยแล้ว รองรับ Executor และภาษาไทย 100%",
         color=discord.Color.purple()
     )
 
@@ -619,11 +619,11 @@ def build_obfuscate_embed(res: dict, input_name: str) -> tuple[discord.Embed, li
     embed.add_field(name="📊 ข้อมูลและสถิติขนาดไฟล์", value=stats_val, inline=False)
 
     security_features = (
-        "• **Register Virtual Machine (VM):** แปลงชุดคำสั่งเป็น Custom Bytecode รันบน Sentinel VM\n"
-        "• **Control Flow Flattening (CFF):** สับเปลี่ยน State Machine ป้องกัน Decompiler ตรวจจับโฟลว์\n"
-        "• **JIT On-Demand Decryption:** สตริงและค่าคงที่ถูกถอดรหัสทีละตัวเมื่อถูกเรียกใช้งาน ป้องกัน Batch Dump\n"
-        "• **Multi-Invariant Dynamic Seed:** ค่าตัวแปรตรวจความปลอดภัยส่งผลต่อ Salt ของทั้งระบบ\n"
-        "• **Anti-Tamper & Metatable Guard:** ตรวจสอบ Metatable Invariants และดักจับ C-closure Spoof"
+        "• **SoA Split-Stream + FASTCALL VM:** แปลงชุดคำสั่งเป็น Register-Pooled Bytecode รันบน Sentinel v5.1 APEX VM (60-120FPS)\n"
+        "• **Hardened Tier-A Native & Auto Hot-Path:** รองรับ `PBZ_`/`LPH_`/`MCY_` Native Macros และเร่งความเร็วลูปอัตโนมัติ\n"
+        "• **Control Flow Flattening & Dual-Mode MBA:** สับเปลี่ยน State Machine + 32-bit MBA ป้องกัน Decompiler\n"
+        "• **IEEE-754 -0.0 Buffer Wipe & Self-Wipe Root:** ล้างบัฟเฟอร์ด้วย `-0.0` + `pcall` Fault Traps และ Sharded Trampolines\n"
+        "• **C-Closure Anti-Hook & Anti-vmmap Masked BST:** ป้องกัน Hook ด้วย Zero-Plaintext Hashed Env Bridge"
     )
     embed.add_field(name="🔒 รายละเอียดชั้นความปลอดภัย (Security Layers)", value=security_features, inline=False)
 
@@ -632,7 +632,7 @@ def build_obfuscate_embed(res: dict, input_name: str) -> tuple[discord.Embed, li
     if script_summary:
         embed.add_field(name="📝 สรุปการทำงานของสคริปต์ (Script Overview)", value=script_summary, inline=False)
 
-    embed.set_footer(text="PAYOMBOYZ Security (Sentinel Engine v4.5) • payomboyzcreative.online")
+    embed.set_footer(text="PAYOMBOYZ Security (Sentinel Engine v5.1 APEX ONYX) • payomboyzcreative.online")
 
     output_path = res.get("output_path")
     obf_code = res.get("obfuscated_code", "")
@@ -2046,9 +2046,9 @@ async def cmd_slash_reverse(
     engine="เลือกเอนจินการเข้ารหัส (แนะนำ: Recommended สำหรับเข้ารหัสหลายชั้น)"
 )
 @app_commands.choices(engine=[
-    app_commands.Choice(name="🟢 Level 1: Fast CFF (Sentinel Engine v4.5 / 60 FPS Native)", value="level1"),
-    app_commands.Choice(name="🟡 Level 2: Balanced Security (Sentinel Engine v4.5 - แนะนำ)", value="level2"),
-    app_commands.Choice(name="🔴 Level 3: Maximum Armor (Sentinel Engine v4.5 / Dynamic Key + JIT Decrypt)", value="level3"),
+    app_commands.Choice(name="🟢 Level 1: OPAL Fast (Sentinel Engine v5.1 APEX / 60-120FPS Zero-Lag)", value="level1"),
+    app_commands.Choice(name="🟡 Level 2: OPAL+ Balanced (Sentinel Engine v5.1 APEX / CFF + Self-Wipe - แนะนำ)", value="level2"),
+    app_commands.Choice(name="🔴 Level 3: ONYX Maximum Armor (Sentinel Engine v5.1 APEX / Dual-Mode MBA + Tier-A Native)", value="level3"),
 ])
 async def cmd_slash_obfuscate(
     interaction: discord.Interaction,
@@ -2095,7 +2095,7 @@ async def cmd_slash_obfuscate(
     except Exception as e:
         safe_err = security.sanitize_output_text(str(e), config.DISCORD_AI_BOT_TOKEN)
         embed = discord.Embed(
-            title="⚡ PAYOMBOYZ Security (Sentinel Engine v4.5) | ❌ เกิดข้อผิดพลาด",
+            title="⚡ PAYOMBOYZ Security (Sentinel Engine v5.1 APEX ONYX) | ❌ เกิดข้อผิดพลาด",
             description=f"เกิดข้อผิดพลาดระหว่างประมวลผล:\n```\n{safe_err[:500]}\n```",
             color=discord.Color.red()
         )
@@ -2207,9 +2207,9 @@ async def cmd_slash_help(interaction: discord.Interaction):
         inline=False
     )
     embed.add_field(
-        name="🔒 คำสั่ง Obfuscator (Sentinel Engine v4.5)",
-        value="• `/obfuscate [file/code] [engine]` : เข้ารหัสและป้องกันสคริปต์ด้วย Sentinel Engine v4.5 (payomboyzcreative.online)\n"
-              "• เอนจินที่รองรับ: Level 3: Maximum Armor (Sentinel Engine v4.5), Level 2: Balanced Security, Level 1: Fast CFF",
+        name="🔒 คำสั่ง Obfuscator (Sentinel Engine v5.1 APEX ONYX)",
+        value="• `/obfuscate [file/code] [engine]` : เข้ารหัสและป้องกันสคริปต์ด้วย Sentinel Engine v5.1 APEX (payomboyzcreative.online)\n"
+              "• เอนจินที่รองรับ: Level 3: ONYX Maximum Armor (Dual-Mode MBA + Tier-A Native), Level 2: OPAL+ Balanced, Level 1: OPAL Fast",
         inline=False
     )
     embed.add_field(

@@ -51,7 +51,13 @@ const PRESERVED_GLOBALS = new Set([
     "setthreadcontext", "getthreadcontext", "Drawing", "cleardrawcache",
     "isrenderobj", "WebSocket", "crypt", "base64", "bit", "lz4compress",
     "lz4decompress", "filtergc", "gethwid", "replicatesignal",
-    "getscriptbytecode", "getscripthash", "getscriptclosure", "decompile"
+    "getscriptbytecode", "getscripthash", "getscriptclosure", "decompile",
+
+    // PAYOMBOYZ Sentinel v5.1 APEX Macros & Native Bridge
+    "__PBZ_NF__", "__PBZ_CRASH__",
+    "PBZ_NO_VIRTUALIZE", "PBZ_JIT", "PBZ_JITMAX", "PBZ_CRASH", "PBZ_OBFUSCATED", "PBZ_LINE",
+    "LPH_NO_VIRTUALIZE", "LPH_JIT", "LPH_JIT_MAX", "LPH_CRASH", "LPH_OBFUSCATED", "LPH_LINE",
+    "MCY_NO_VIRTUALIZE", "MCY_JIT", "MCY_JITMAX", "MCY_CRASH", "MCY_OBFUSCATED", "MCY_LINE"
 ]);
 function isValidIdentifier(name) {
     return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name) && !KEYWORDS.has(name);
@@ -285,7 +291,7 @@ function transformStatement(stmt, scope) {
             const step = stmt.step ? transformExpression(stmt.step, scope) : undefined;
             scope.pushScope();
             const v = scope.declare(stmt.var.name);
-            const varNode = { type: "Identifier", name: v, loc: stmt.var.loc };
+            const varNode = { ...stmt.var, name: v };
             const body = stmt.body.map((s) => transformStatement(s, scope));
             scope.popScope();
             return {
@@ -361,7 +367,7 @@ function transformStatement(stmt, scope) {
                 scope.pushScope();
                 const cBody = c.body.map((s) => transformStatement(s, scope));
                 scope.popScope();
-                return { condition: cCond, body: cBody };
+                return { ...c, condition: cCond, body: cBody };
             });
             let elseBody = undefined;
             if (stmt.elseBody) {
@@ -500,6 +506,7 @@ function transformExpression(exp, scope) {
                 condition: transformExpression(exp.condition, scope),
                 thenExp: transformExpression(exp.thenExp, scope),
                 elseifClauses: exp.elseifClauses.map((c) => ({
+                    ...c,
                     condition: transformExpression(c.condition, scope),
                     value: transformExpression(c.value, scope),
                 })),

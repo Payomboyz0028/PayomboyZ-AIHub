@@ -2,6 +2,7 @@
 import { readFileSync, writeFileSync } from "fs";
 import { lex } from "../lexer/Lexer.js";
 import { parse } from "../parser/Parser.js";
+import { preprocessMacrosAndTiers } from "../vm/v5-macros-native.js";
 import { obfuscate } from "../obfuscator/Obfuscator.js";
 import { regCompile } from "../vm/RegCompiler.js";
 import { generateRegVM } from "../vm/reg-vm-gen.js";
@@ -9,7 +10,11 @@ const args = process.argv.slice(2);
 let level = "normal";
 if (args.includes("--debug"))
     level = "debug";
-if (args.includes("--max"))
+if (args.includes("--fast") || args.includes("--level1"))
+    level = "fast";
+if (args.includes("--normal") || args.includes("--level2"))
+    level = "normal";
+if (args.includes("--max") || args.includes("--level3"))
     level = "max";
 const outIndex = args.findIndex(a => a === "-o" || a === "--output");
 const outFile = outIndex >= 0 ? args[outIndex + 1] : null;
@@ -20,6 +25,7 @@ if (!file) {
     process.exit(1);
 }
 const source = readFileSync(file, "utf-8");
+console.error(`[RegVM] Engine: Sentinel Engine v5.1 APEX`);
 console.error(`[RegVM] Input: ${file} (${source.length} chars)`);
 console.error(`[RegVM] Level: ${level}`);
 const t0 = Date.now();
@@ -31,8 +37,13 @@ if (lexErrors.length > 0) {
 }
 // Parse
 const ast = parse(tokens);
+// Macros, execution tiers & native extraction
+const { ast: preAst, nativeFuncs } = preprocessMacrosAndTiers(ast, {
+    placeId: 0,
+    target: "luau",
+});
 // Obfuscate AST (rename locals)
-const obfuscated = obfuscate(ast, {
+const obfuscated = obfuscate(preAst, {
     renameLocals: true,
     preserveGlobals: true,
 });
@@ -48,6 +59,7 @@ const output = generateRegVM(chunk, {
     executorGlobals: level !== "debug",
     polymorphicSeed: Date.now(),
     debugTrace: false,
+    nativeFuncs,
     disableFeatures: disableFeatures,
 });
 const elapsed = Date.now() - t0;
