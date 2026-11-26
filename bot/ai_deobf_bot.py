@@ -598,8 +598,8 @@ def build_obfuscate_embed(res: dict, input_name: str) -> tuple[discord.Embed, li
     verified = res.get("verified", True)
 
     embed = discord.Embed(
-        title="⚡ PAYOMBOYZ Security (Sentinel Engine v5.1 APEX ONYX) | ✅ เข้ารหัสและป้องกันสำเร็จ",
-        description=f"สคริปต์ `{safe_input_name}` ได้รับการป้องกันผ่านสถาปัตยกรรม **PAYOMBOYZ Security (Sentinel Engine v5.1 APEX ONYX/OPAL)** เรียบร้อยแล้ว รองรับ Executor และภาษาไทย 100%",
+        title="⚡ PAYOMBOYZ Security (Sentinel Engine v5.3 APEX ONYX) | ✅ เข้ารหัสและป้องกันสำเร็จ",
+        description=f"สคริปต์ `{safe_input_name}` ได้รับการป้องกันผ่านสถาปัตยกรรม **PAYOMBOYZ Security (Sentinel Engine v5.3 APEX ONYX/OPAL)** เรียบร้อยแล้ว รองรับ Executor และภาษาไทย 100%",
         color=discord.Color.purple()
     )
 
@@ -619,11 +619,11 @@ def build_obfuscate_embed(res: dict, input_name: str) -> tuple[discord.Embed, li
     embed.add_field(name="📊 ข้อมูลและสถิติขนาดไฟล์", value=stats_val, inline=False)
 
     security_features = (
-        "• **SoA Split-Stream + FASTCALL VM:** แปลงชุดคำสั่งเป็น Register-Pooled Bytecode รันบน Sentinel v5.1 APEX VM (60-120FPS)\n"
-        "• **Hardened Tier-A Native & Auto Hot-Path:** รองรับ `PBZ_`/`LPH_`/`MCY_` Native Macros และเร่งความเร็วลูปอัตโนมัติ\n"
-        "• **Control Flow Flattening & Dual-Mode MBA:** สับเปลี่ยน State Machine + 32-bit MBA ป้องกัน Decompiler\n"
-        "• **IEEE-754 -0.0 Buffer Wipe & Self-Wipe Root:** ล้างบัฟเฟอร์ด้วย `-0.0` + `pcall` Fault Traps และ Sharded Trampolines\n"
-        "• **C-Closure Anti-Hook & Anti-vmmap Masked BST:** ป้องกัน Hook ด้วย Zero-Plaintext Hashed Env Bridge"
+        "• **Rolling-State Block Cipher (`_st`):** เข้ารหัสทุก Basic Block ด้วย Rolling Key ตาม Control-Flow Edge ถอดรหัสครั้งเดียวต่อการเข้าบล็อก\n"
+        "• **Merged Handlers & Micro-Op Split:** ยุบหลาย Opcode ลง 1 BST Leaf + แตก `CLOSURE`/`FORLOOP`/`TFORLOOP` ทำลาย 1:1 AST Match\n"
+        "• **IR State-Machine & Register Permutation:** แปลง Flow เป็น State Dispatcher + สับเปลี่ยน Register ลบโครงสร้าง IR\n"
+        "• **Hardened Tier-A Native & `LPH_ATTRIBUTES`:** รองรับ `PBZ_`/`LPH_`/`MCY_` Native Macros และ Strict Roblox C-Engine Lock\n"
+        "• **128-bit ARX + Anti-vmmap Masked BST:** Zero-Plaintext Env Bridge, `-0.0` Buffer Wipe & Anti-Spy Traps"
     )
     embed.add_field(name="🔒 รายละเอียดชั้นความปลอดภัย (Security Layers)", value=security_features, inline=False)
 
@@ -632,7 +632,7 @@ def build_obfuscate_embed(res: dict, input_name: str) -> tuple[discord.Embed, li
     if script_summary:
         embed.add_field(name="📝 สรุปการทำงานของสคริปต์ (Script Overview)", value=script_summary, inline=False)
 
-    embed.set_footer(text="PAYOMBOYZ Security (Sentinel Engine v5.1 APEX ONYX) • payomboyzcreative.online")
+    embed.set_footer(text="PAYOMBOYZ Security (Sentinel Engine v5.3 APEX ONYX) • payomboyzcreative.online")
 
     output_path = res.get("output_path")
     obf_code = res.get("obfuscated_code", "")
@@ -1342,7 +1342,7 @@ async def cmd_slash_re_inspect(interaction: discord.Interaction, file: discord.A
         if apis:
             embed.add_field(name="⚠️ Critical API Sinks Detected", value=", ".join(f"`{a}`" for a in apis), inline=False)
         embed.set_footer(text="REA Hopper / Ghidra Native Evidence Contract")
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
     else:
         await interaction.followup.send(f"❌ วิเคราะห์ไบนารีไม่สำเร็จ: `{pe_report.get('error')}`")
 
@@ -1614,7 +1614,7 @@ async def cmd_slash_panel_remove(interaction: discord.Interaction, message_id: s
     app_commands.Choice(name="ThaiLLM", value="thaillm")
 ])
 async def cmd_slash_ai(interaction: discord.Interaction, prompt: str, provider: str = "auto"):
-    await interaction.response.defer(thinking=True)
+    await interaction.response.defer(thinking=True, ephemeral=True)
     QUALITY_MONITOR.note_activity()
     start_t = time.time()
 
@@ -1641,7 +1641,7 @@ async def cmd_slash_ai(interaction: discord.Interaction, prompt: str, provider: 
             description=f"AI Engine เกิดข้อผิดพลาด:\n```\n{str(e)[:500]}\n```",
             color=discord.Color.red()
         )
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
         return
 
     elapsed = time.time() - start_t
@@ -1659,7 +1659,7 @@ async def cmd_slash_ai(interaction: discord.Interaction, prompt: str, provider: 
             description=f"**คำถาม:** {prompt[:200]}\n**Engine:** `{model_name}` | **Latency:** `{elapsed:.2f}s`\n\n{tagged_reply}",
             color=discord.Color.from_rgb(0, 230, 150)
         )
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
     else:
         # Long response: send comprehensive overview embed + attach complete production script
         first_chunk = tagged_reply[:1800]
@@ -1813,7 +1813,7 @@ async def cmd_slash_bypass(interaction: discord.Interaction, topic: str, executo
             color=discord.Color.from_rgb(138, 43, 226)
         )
         embed.set_footer(text="💡 ใช้ /feedback เพื่อรายงานผลการใช้งาน ช่วยให้ AI เรียนรู้และฉลาดขึ้น!")
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ เกิดข้อผิดพลาดใน Bypass Professor: `{str(e)[:200]}`")
 
@@ -1883,7 +1883,7 @@ async def cmd_slash_deobf(
         )
         return
 
-    await interaction.response.defer(thinking=True)
+    await interaction.response.defer(thinking=True, ephemeral=True)
     QUALITY_MONITOR.note_activity()
 
     input_name = file.filename if file else "Pasted_Script.lua"
@@ -1938,7 +1938,7 @@ async def cmd_slash_deobf(
             description=f"เกิดข้อผิดพลาดระหว่างประมวลผล:\n```\n{safe_err[:500]}\n```",
             color=discord.Color.red()
         )
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     finally:
         if temp_path and os.path.exists(temp_path):
@@ -2046,9 +2046,9 @@ async def cmd_slash_reverse(
     engine="เลือกเอนจินการเข้ารหัส (แนะนำ: Recommended สำหรับเข้ารหัสหลายชั้น)"
 )
 @app_commands.choices(engine=[
-    app_commands.Choice(name="🟢 Level 1: OPAL Fast (Sentinel Engine v5.1 APEX / 60-120FPS Zero-Lag)", value="level1"),
-    app_commands.Choice(name="🟡 Level 2: OPAL+ Balanced (Sentinel Engine v5.1 APEX / CFF + Self-Wipe - แนะนำ)", value="level2"),
-    app_commands.Choice(name="🔴 Level 3: ONYX Maximum Armor (Sentinel Engine v5.1 APEX / Dual-Mode MBA + Tier-A Native)", value="level3"),
+    app_commands.Choice(name="🟢 Level 1: OPAL Fast (Sentinel Engine v5.3 APEX / 60-120FPS Zero-Lag)", value="level1"),
+    app_commands.Choice(name="🟡 Level 2: OPAL+ Balanced (Sentinel Engine v5.3 APEX / Rolling Cipher - แนะนำ)", value="level2"),
+    app_commands.Choice(name="🔴 Level 3: ONYX Maximum Armor (Sentinel Engine v5.3 APEX / Rolling + IR CFF + Merged)", value="level3"),
 ])
 async def cmd_slash_obfuscate(
     interaction: discord.Interaction,
@@ -2063,7 +2063,7 @@ async def cmd_slash_obfuscate(
         )
         return
 
-    await interaction.response.defer(thinking=True)
+    await interaction.response.defer(thinking=True, ephemeral=True)
 
     input_name = file.filename if file else "Script.lua"
     chosen_engine = engine.value if engine else "level2"
@@ -2095,11 +2095,11 @@ async def cmd_slash_obfuscate(
     except Exception as e:
         safe_err = security.sanitize_output_text(str(e), config.DISCORD_AI_BOT_TOKEN)
         embed = discord.Embed(
-            title="⚡ PAYOMBOYZ Security (Sentinel Engine v5.1 APEX ONYX) | ❌ เกิดข้อผิดพลาด",
+            title="⚡ PAYOMBOYZ Security (Sentinel Engine v5.3 APEX ONYX) | ❌ เกิดข้อผิดพลาด",
             description=f"เกิดข้อผิดพลาดระหว่างประมวลผล:\n```\n{safe_err[:500]}\n```",
             color=discord.Color.red()
         )
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     finally:
         if temp_path and os.path.exists(temp_path):

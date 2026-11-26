@@ -23,6 +23,22 @@ export function modInv32(a) {
     return inv >>> 0;
 }
 
+export function rotL32(x, s) {
+    return ((x << s) | (x >>> (32 - s))) >>> 0;
+}
+
+/**
+ * Exact 4x32-bit ARX sponge step matching Lua U[methSec] _mx(w0, w1).
+ */
+export function arxMix32(lanes, w0, w1) {
+    const u0 = w0 >>> 0;
+    const u1 = w1 >>> 0;
+    lanes[0] = (imul32((lanes[0] + u0) >>> 0, 2654435761) ^ rotL32(lanes[1], 7)) >>> 0;
+    lanes[1] = (imul32((lanes[1] ^ u1) >>> 0, 2246822519) + rotL32(lanes[2], 13)) >>> 0;
+    lanes[2] = (imul32((lanes[2] + ((lanes[0] ^ lanes[3]) >>> 0)) >>> 0, 3266489917) ^ rotL32(lanes[3], 17)) >>> 0;
+    lanes[3] = (imul32((lanes[3] ^ lanes[0]) >>> 0, 668265263) + rotL32(lanes[1], 11)) >>> 0;
+}
+
 /**
  * Generates a per-build randomized invertible 32-bit MBA codec over field values.
  *

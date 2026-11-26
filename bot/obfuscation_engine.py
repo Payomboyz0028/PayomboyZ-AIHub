@@ -2574,7 +2574,7 @@ end)()
 
 
 
-            # Priority 1: Sentinel Engine v5.1 APEX ONYX / OPAL Native Node VM Architecture
+            # Priority 1: Sentinel Engine v5.3 APEX ONYX / OPAL Native Node VM Architecture
             if use_pbg:
                 try:
                     with open(temp_in, "w", encoding="utf-8") as f:
@@ -2586,16 +2586,16 @@ end)()
 
                     if choice_lower in ("level1", "1", "fast", "light"):
                         v5_lvl = "fast"
-                        v5_engine_label = "\U0001f7e2 Level 1: OPAL Fast (Sentinel Engine v5.1 APEX / 60-120FPS Zero-Lag)"
-                        v5_verify_label = "Sentinel v5.1 APEX OPAL SoA FASTCALL VM + Tier-A Native + Anti-vmmap Masked BST"
+                        v5_engine_label = "\U0001f7e2 Level 1: OPAL Fast (Sentinel Engine v5.3 APEX / 60-120FPS Zero-Lag)"
+                        v5_verify_label = "Sentinel v5.3 APEX OPAL SoA FASTCALL VM + Tier-A Native + LPH_ATTRIBUTES"
                     elif choice_lower in ("level2", "2", "recommended", "default", "balanced", "normal"):
                         v5_lvl = "normal"
-                        v5_engine_label = "\U0001f7e1 Level 2: OPAL+ Balanced (Sentinel Engine v5.1 APEX / CFF + Self-Wipe)"
-                        v5_verify_label = "Sentinel v5.1 APEX OPAL+ Basic-Block CFF + IEEE-754 -0.0 Self-Wipe + Sharded Trampolines"
+                        v5_engine_label = "\U0001f7e1 Level 2: OPAL+ Balanced (Sentinel Engine v5.3 APEX / Rolling Block Cipher + Merged ISA)"
+                        v5_verify_label = "Sentinel v5.3 APEX OPAL+ Rolling Block Cipher + Reg Perm + Merged/Split ISA"
                     else:
                         v5_lvl = "max"
-                        v5_engine_label = "\U0001f534 Level 3: ONYX Maximum Armor (Sentinel Engine v5.1 APEX / Dual-Mode MBA + Tier-A Native)"
-                        v5_verify_label = "Sentinel v5.1 APEX ONYX Dual-Mode MBA + Tier-A Native + C-Closure Env + Anti-vmmap BST"
+                        v5_engine_label = "\U0001f534 Level 3: ONYX Maximum Armor (Sentinel Engine v5.3 APEX / Rolling Cipher + IR CFF + Merged/Split ISA)"
+                        v5_verify_label = "Sentinel v5.3 APEX ONYX Rolling Block Cipher + IR CFF + Merged/Split ISA + Strict Roblox Lock"
 
                     v5_ok, v5_err = self._run_clyde_pipeline(str(temp_in), str(temp_out), level=v5_lvl)
                     if v5_ok and temp_out.exists() and temp_out.stat().st_size > 0:
@@ -2608,15 +2608,15 @@ end)()
                                 accepted_engine = v5_engine_label
                                 accepted_verification = f"{v5_verify_label} | {rt_msg}"
                             else:
-                                last_error = f"Sentinel v5.1 APEX runtime gate failed: {rt_msg}"
-                                print(f"[SENTINEL v5.1 APEX] Runtime check failed ({rt_msg}), trying Prometheus VM fallback...", flush=True)
+                                last_error = f"Sentinel v5.3 APEX runtime gate failed: {rt_msg}"
+                                print(f"[SENTINEL v5.3 APEX] Runtime check failed ({rt_msg}), trying Prometheus VM fallback...", flush=True)
                         else:
-                            last_error = f"Sentinel v5.1 APEX syntax check failed: {syn_msg}"
+                            last_error = f"Sentinel v5.3 APEX syntax check failed: {syn_msg}"
                     else:
-                        last_error = f"Sentinel v5.1 APEX CLI error: {v5_err}"
+                        last_error = f"Sentinel v5.3 APEX CLI error: {v5_err}"
                 except Exception as v5_exc:
-                    last_error = f"Sentinel v5.1 APEX exception: {v5_exc}"
-                    print(f"[SENTINEL v5.1 APEX] Exception: {v5_exc}", flush=True)
+                    last_error = f"Sentinel v5.3 APEX exception: {v5_exc}"
+                    print(f"[SENTINEL v5.3 APEX] Exception: {v5_exc}", flush=True)
 
             # Priority 2: External Prometheus CLI VM pipeline (if Sentinel v5.1 APEX Node VM unavailable; never degrades to raw loadstring)
             if not final_code:

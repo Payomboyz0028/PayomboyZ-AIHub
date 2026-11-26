@@ -103,10 +103,41 @@ export const V5Op = {
     S_CALL2_VOID: 75,
     S_CALL3: 76,
     S_MOD_K: 77,
+    // Sentinel v5.2 APEX Compound Superinstructions
+    F_NEWTAB_SET: 78,
+    F_GGET_SET: 79,
+    F_LOADK_CALL1: 80,
+    F_LOADK_CALL1_VOID: 81,
+    // Sentinel v5.2 APEX Polymorphic _V2 Cloned Opcodes (Swapped Operand Layouts)
+    LOADK_V2: 82,
+    MOVE_V2: 83,
+    GETGLOBAL_V2: 84,
+    GETTABLE_V2: 85,
+    SETTABLE_V2: 86,
+    ADD_V2: 87,
+    SUB_V2: 88,
+    JMP_V2: 89,
+    RETURN_V2: 90,
+    F_TEST_JMP_V2: 91,
+    F_EQ_JMP_V2: 92,
+    // Sentinel v5.3 APEX Rolling-State Block Cipher + Merged Handlers + Split Micro-Ops
+    OP_BLK_ENTER: 93,
+    OP_STATE_STEP: 94,
+    M_TAB_SUB_NOT: 95,
+    M_SET_ADD_LEN: 96,
+    M_ENV_MOV_UNM: 97,
+    M_LDK_MUL_SGL: 98,
+    M_DIV_MOD_GUP: 99,
+    M_CAT_POW_SUP: 100,
+    U_PROTO_FETCH: 101,
+    U_UPVAL_BIND: 102,
+    U_CLOSURE_WRAP: 103,
+    U_FOR_STEP: 104,
+    U_TFOR_CALL: 105,
 };
 
 export const REG_OPCODE_COUNT = 57;
-export const V5_OPCODE_COUNT = 78;
+export const V5_OPCODE_COUNT = 106;
 
 export function regEmit(chunk, op, A = 0, B = 0, C = 0) {
     const pos = chunk.code.length;

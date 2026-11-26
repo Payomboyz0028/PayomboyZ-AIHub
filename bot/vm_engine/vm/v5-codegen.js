@@ -1,14 +1,15 @@
 // language: JavaScript, file: v5-codegen.js, target: Node.js ESM
-// Sentinel v5.1 APEX Runtime Codegen (ONYX / OPAL):
+// Sentinel v5.3 APEX Runtime Codegen (ONYX / OPAL):
 // - Shuffled Primitive Metatable `U` + Pure-Lua buffer/bit32/f64 fallbacks
-// - Non-Zero Integrity Derivation Key (K_sec != 0) + IEEE-754 -0.0 Buffer Key + Exception/C-Closure/Anti-Spy Traps + PlaceId Lock
-// - Sharded Function-Table Trampoline Bootstrap Deserializer (Luraph v15 style)
+// - 128-Bit (4x32-bit) ARX Integrity Derivation Key Vector `[K0..K3]` + IEEE-754 -0.0 Buffer Key + Traps + PlaceId Lock + Strict Roblox C-Engine Fingerprint
+// - Zero-Oracle Sharded Function-Table Trampoline Deserializer (Drop-256 128-bit RC4+ARX + MAC32 + AoS Interleaved Rolling LCG)
+// - Path-Dependent Rolling State (`_st`) + Universal Once-Per-Block Decryption + Merged Multi-Semantics & Split Micro-Op Handlers
 // - Zero-Plaintext Hashed Environment Bridge & Sealed Lazy Master Constant Pool
 // - Tier A Hardened Native Functions (`__PBZ_NF__`) + `__PBZ_CRASH__`
 // - FASTCALL-Hoisted Dual-Mode Masked BST VM + Register Frame Pool + Ephemeral Self-Wiping Root Proto
 
-import { V5Op, V5_OPCODE_COUNT, RK_OFFSET } from "./bytecode.js";
-import { emitOpaquePredicate } from "./v5-mba.js";
+import { V5Op, V5_OPCODE_COUNT } from "./bytecode.js";
+import { emitOpaquePredicate, arxMix32 } from "./v5-mba.js";
 import { emitHardenedNativeLua } from "./v5-macros-native.js";
 
 function toUTF8Bytes(s) {
@@ -104,63 +105,85 @@ function buildAntiVmmapBST(entries, opVar, rng, vmSym, mode) {
 
 /**
  * Generates opcode handler body inside an isolated `do ... end` (or direct) block
- * using hoisted FASTCALL primitives (`vmSym`) and SoA slot arrays `_c0.._c4`.
- * Audited so NO local name collides with `_c0.._c4`, `_q`, `_pc`, `_R`, `_K`, `_E`, `_U`,
- * `_P`, `_O`, `_md`, `_ks`, `_mb`, `_tw`, `_tp`, `_kLo`, `_fp`, `_fpn`, or hoisted primitives.
+ * using hoisted FASTCALL primitives (`vmSym`), randomized SoA slot vars (`modeSlots`),
+ * per-proto shifted `_rb`/`_kb` bases, dynamic PC+Key algebraic operand decoders,
+ * per-opcode reg bias, and randomized `rkOffset`.
  */
 function buildOpcodeHandlerBody(op, modeCfg, vCtx) {
     const {
         uSym, vmSym, rVar, kVar, envVar, pcVar, topVar, upVar, poolVar, openUvVar,
-        modeVar, kSecVar, modeSlots, mbaDecVar, isFastMode,
+        modeVar, k1Var, k2Var, rbVar, kbVar, stVar, mbaDecVar, isFastMode, rkOffset, qVar, cArrVars, mergeTags, rng,
     } = vCtx;
 
-    const slots = modeSlots[modeCfg.modeId];
+    const slots = modeSlotsCompat(modeCfg, cArrVars);
     const sA = slots[modeCfg.role.A];
     const sB = slots[modeCfg.role.B];
     const sC = slots[modeCfg.role.C];
     const sD = slots[modeCfg.role.D];
     const sOp = slots[modeCfg.role.op];
-    const ox = modeCfg.opFieldXor[op];
 
-    const decF = (arr, x) => x === 0 ? `${arr}[_q]` : `${vmSym.bx}(${arr}[_q],${x})`;
-    const decA = decF(sA, ox[0]);
-    const decB = decF(sB, ox[1]);
-    const decC = decF(sC, ox[2]);
-    const decD = `${sD}[_q]`;
+    const bias = modeCfg.opRegBias[op] || 0;
 
-    const rk = (expr) => `((_t<${RK_OFFSET})and ${rVar}[_t+1]or ${kVar}[_t-${RK_OFFSET - 1}])`.replace(/_t/g, `(${expr})`);
+    // Direct zero-modulo array reads (operands already decrypted once per block into sA..sD on entry!)
+    const emitDynDec = (arr, _spec, subtractVal = 0) => {
+        const rawEl = `${arr}[${qVar}]`;
+        return subtractVal > 0 ? `(${rawEl}-${subtractVal})` : rawEl;
+    };
 
-    const wipeEp = isFastMode ? `` : `if _ep then for _wi=1,_ni do _c0[_wi]=nil;_c1[_wi]=nil;_c2[_wi]=nil;_c3[_wi]=nil;_c4[_wi]=nil end end;`;
-    const recFrame = `if not _O and _fpn<64 then _tclr(${rVar});_fpn=_fpn+1;_fp[_fpn]=${rVar} end;`;
+    // decA: raw 0-based field A (unbiased); regA: Lua 1-based register index (_rb + plainA)
+    const decA = emitDynDec(sA, null, bias);
+    const regA = bias > 0
+        ? `(${emitDynDec(sA, null, 0)}+${rbVar}-${bias})`
+        : `(${decA}+${rbVar})`;
+    const decB = emitDynDec(sB, null, 0);
+    const decC = emitDynDec(sC, null, 0);
+    const decD = `${sD}[${qVar}]`;
+
+    // Edge rolling key update on taken jump/branch
+    const stJump = isFastMode ? `` : `;${stVar}=${vmSym.bx}(${stVar},${decD})`;
+    const packedBranch = (fieldExpr, cmpOp, lhsFn, rhsFn) => {
+        if (isFastMode) {
+            return `do local _x=${decB};local _y=${decC};if(${lhsFn("_x")}${cmpOp}${rhsFn("_y")})==(${fieldExpr}~=0)then ${pcVar}=${decD} end end`;
+        }
+        return `do local _x=${decB};local _y=${decC};local _af=${fieldExpr};local _fl=(_af%2~=0);local _tp=(_af-(_fl and 1 or 0))/2;if(${lhsFn("_x")}${cmpOp}${rhsFn("_y")})==_fl then ${pcVar}=_tp;${stVar}=${vmSym.bx}(${stVar},${decD})end end`;
+    };
+
+    const rk = (expr) => {
+        const t = `(${expr})`;
+        return `((${t}<${rkOffset})and ${rVar}[${t}+${rbVar}]or ${kVar}[${t}-${rkOffset}+${kbVar}])`;
+    };
+
+    const wipeEp = isFastMode ? `` : `if _ep then for _wi=1,_ni do ${cArrVars[0]}[_wi]=nil;${cArrVars[1]}[_wi]=nil;${cArrVars[2]}[_wi]=nil;${cArrVars[3]}[_wi]=nil;${cArrVars[4]}[_wi]=nil end end;`;
+    const recFrame = `if not ${openUvVar} and _fpn<64 then _tclr(${rVar});_fpn=_fpn+1;_fp[_fpn]=${rVar} end;`;
     const yieldChk = `if _tw then _sc=_sc+1;if _sc%65536==0 then _tw() end end;`;
 
-    // Zero-table.pack fast paths for C==1 (void) and C==2 (1 return value)
+    // Zero-table.pack fast paths for C==1 (void) and C==2 (1 return value) using 1-based _pa = decA + _rb
     const emitVarCall = (bExpr, cExpr) => {
         return `local _b=${bExpr};local _c=${cExpr};` +
             `if _c==1 then ` +
                 `if _b==1 then _f() ` +
-                `elseif _b==2 then _f(${rVar}[_a+2]) ` +
-                `elseif _b==3 then _f(${rVar}[_a+2],${rVar}[_a+3]) ` +
-                `elseif _b==4 then _f(${rVar}[_a+2],${rVar}[_a+3],${rVar}[_a+4]) ` +
-                `elseif _b==0 then _f(${vmSym.tu}(${rVar},_a+2,${topVar})) ` +
-                `else _f(${vmSym.tu}(${rVar},_a+2,_a+_b)) end ` +
+                `elseif _b==2 then _f(${rVar}[_pa+1]) ` +
+                `elseif _b==3 then _f(${rVar}[_pa+1],${rVar}[_pa+2]) ` +
+                `elseif _b==4 then _f(${rVar}[_pa+1],${rVar}[_pa+2],${rVar}[_pa+3]) ` +
+                `elseif _b==0 then _f(${vmSym.tu}(${rVar},_pa+1,${topVar})) ` +
+                `else _f(${vmSym.tu}(${rVar},_pa+1,_pa+_b-1)) end ` +
             `elseif _c==2 then ` +
-                `if _b==1 then ${rVar}[_a+1]=_f() ` +
-                `elseif _b==2 then ${rVar}[_a+1]=_f(${rVar}[_a+2]) ` +
-                `elseif _b==3 then ${rVar}[_a+1]=_f(${rVar}[_a+2],${rVar}[_a+3]) ` +
-                `elseif _b==4 then ${rVar}[_a+1]=_f(${rVar}[_a+2],${rVar}[_a+3],${rVar}[_a+4]) ` +
-                `elseif _b==0 then ${rVar}[_a+1]=_f(${vmSym.tu}(${rVar},_a+2,${topVar})) ` +
-                `else ${rVar}[_a+1]=_f(${vmSym.tu}(${rVar},_a+2,_a+_b)) end ` +
+                `if _b==1 then ${rVar}[_pa]=_f() ` +
+                `elseif _b==2 then ${rVar}[_pa]=_f(${rVar}[_pa+1]) ` +
+                `elseif _b==3 then ${rVar}[_pa]=_f(${rVar}[_pa+1],${rVar}[_pa+2]) ` +
+                `elseif _b==4 then ${rVar}[_pa]=_f(${rVar}[_pa+1],${rVar}[_pa+2],${rVar}[_pa+3]) ` +
+                `elseif _b==0 then ${rVar}[_pa]=_f(${vmSym.tu}(${rVar},_pa+1,${topVar})) ` +
+                `else ${rVar}[_pa]=_f(${vmSym.tu}(${rVar},_pa+1,_pa+_b-1)) end ` +
             `else ` +
                 `local _r;` +
                 `if _b==1 then _r=${vmSym.tp}(_f()) ` +
-                `elseif _b==2 then _r=${vmSym.tp}(_f(${rVar}[_a+2])) ` +
-                `elseif _b==3 then _r=${vmSym.tp}(_f(${rVar}[_a+2],${rVar}[_a+3])) ` +
-                `elseif _b==4 then _r=${vmSym.tp}(_f(${rVar}[_a+2],${rVar}[_a+3],${rVar}[_a+4])) ` +
-                `elseif _b==0 then _r=${vmSym.tp}(_f(${vmSym.tu}(${rVar},_a+2,${topVar}))) ` +
-                `else _r=${vmSym.tp}(_f(${vmSym.tu}(${rVar},_a+2,_a+_b))) end;` +
-                `if _c==0 then for _i=1,_r.n do ${rVar}[_a+_i]=_r[_i] end;${topVar}=_a+_r.n ` +
-                `else for _i=1,_c-1 do ${rVar}[_a+_i]=_r[_i] end end ` +
+                `elseif _b==2 then _r=${vmSym.tp}(_f(${rVar}[_pa+1])) ` +
+                `elseif _b==3 then _r=${vmSym.tp}(_f(${rVar}[_pa+1],${rVar}[_pa+2])) ` +
+                `elseif _b==4 then _r=${vmSym.tp}(_f(${rVar}[_pa+1],${rVar}[_pa+2],${rVar}[_pa+3])) ` +
+                `elseif _b==0 then _r=${vmSym.tp}(_f(${vmSym.tu}(${rVar},_pa+1,${topVar}))) ` +
+                `else _r=${vmSym.tp}(_f(${vmSym.tu}(${rVar},_pa+1,_pa+_b-1))) end;` +
+                `if _c==0 then for _i=1,_r.n do ${rVar}[_pa+_i-1]=_r[_i] end;${topVar}=_pa+_r.n-1 ` +
+                `else for _i=1,_c-1 do ${rVar}[_pa+_i-1]=_r[_i] end end ` +
             `end `;
     };
 
@@ -168,47 +191,63 @@ function buildOpcodeHandlerBody(op, modeCfg, vCtx) {
         case V5Op.NOP:
             return ``;
         case V5Op.LOADK:
-            return `${rVar}[${decA}+1]=${kVar}[${decB}+1]`;
+            return `${rVar}[${regA}]=${kVar}[${decB}+${kbVar}]`;
+        case V5Op.LOADK_V2:
+            return `${rVar}[${decC}+${rbVar}]=${kVar}[${decA}+${kbVar}]`;
         case V5Op.LOADNIL:
-            return `do local _a=${decA};for _i=_a,_a+${decB} do ${rVar}[_i+1]=nil end end`;
+            return `do local _pa=${regA};for _i=_pa,_pa+${decB} do ${rVar}[_i]=nil end end`;
         case V5Op.LOADBOOL:
-            return `${rVar}[${decA}+1]=(${decB}~=0);if ${decC}~=0 then ${pcVar}=${decD} end`;
+            return `${rVar}[${regA}]=(${decB}~=0);if ${decC}~=0 then ${pcVar}=${decC}${stJump} end`;
         case V5Op.MOVE:
-            return `${rVar}[${decA}+1]=${rVar}[${decB}+1]`;
+            return `${rVar}[${regA}]=${rVar}[${decB}+${rbVar}]`;
+        case V5Op.MOVE_V2:
+            return `${rVar}[${decB}+${rbVar}]=${rVar}[${regA}]`;
         case V5Op.GETGLOBAL:
-            return `${rVar}[${decA}+1]=${envVar}[${kVar}[${decB}+1]]`;
+            return `${rVar}[${regA}]=${envVar}[${kVar}[${decB}+${kbVar}]]`;
+        case V5Op.GETGLOBAL_V2:
+            return `${rVar}[${decC}+${rbVar}]=${envVar}[${kVar}[${decA}+${kbVar}]]`;
         case V5Op.SETGLOBAL:
-            return `${envVar}[${kVar}[${decB}+1]]=${rVar}[${decA}+1]`;
+            return `${envVar}[${kVar}[${decB}+${kbVar}]]=${rVar}[${regA}]`;
         case V5Op.GETTABLE:
-            return `do local _t=${decC};${rVar}[${decA}+1]=${rVar}[${decB}+1][${rk("_t")}]end`;
+            return `do local _t=${decC};${rVar}[${regA}]=${rVar}[${decB}+${rbVar}][${rk("_t")}]end`;
+        case V5Op.GETTABLE_V2:
+            return `do local _t=${decB};${rVar}[${decC}+${rbVar}]=${rVar}[${regA}][${rk("_t")}]end`;
         case V5Op.SETTABLE:
-            return `do local _k=${decB};local _v=${decC};${rVar}[${decA}+1][${rk("_k")}]=${rk("_v")}end`;
+            return `do local _k=${decB};local _v=${decC};${rVar}[${regA}][${rk("_k")}]=${rk("_v")}end`;
+        case V5Op.SETTABLE_V2:
+            return `do local _k=${decA};local _v=${decB};${rVar}[${decC}+${rbVar}][${rk("_k")}]=${rk("_v")}end`;
         case V5Op.NEWTABLE:
-            return `${rVar}[${decA}+1]={}`;
+            return `${rVar}[${regA}]={}`;
         case V5Op.ADD:
-            return `do local _x=${decB};local _y=${decC};${rVar}[${decA}+1]=${rk("_x")}+${rk("_y")}end`;
+            return `do local _x=${decB};local _y=${decC};${rVar}[${regA}]=${rk("_x")}+${rk("_y")}end`;
+        case V5Op.ADD_V2:
+            return `do local _x=${decA};local _y=${decB};${rVar}[${decC}+${rbVar}]=${rk("_x")}+${rk("_y")}end`;
         case V5Op.SUB:
-            return `do local _x=${decB};local _y=${decC};${rVar}[${decA}+1]=${rk("_x")}-${rk("_y")}end`;
+            return `do local _x=${decB};local _y=${decC};${rVar}[${regA}]=${rk("_x")}-${rk("_y")}end`;
+        case V5Op.SUB_V2:
+            return `do local _x=${decA};local _y=${decB};${rVar}[${decC}+${rbVar}]=${rk("_x")}-${rk("_y")}end`;
         case V5Op.MUL:
-            return `do local _x=${decB};local _y=${decC};${rVar}[${decA}+1]=${rk("_x")}*${rk("_y")}end`;
+            return `do local _x=${decB};local _y=${decC};${rVar}[${regA}]=${rk("_x")}*${rk("_y")}end`;
         case V5Op.DIV:
-            return `do local _x=${decB};local _y=${decC};${rVar}[${decA}+1]=${rk("_x")}/${rk("_y")}end`;
+            return `do local _x=${decB};local _y=${decC};${rVar}[${regA}]=${rk("_x")}/${rk("_y")}end`;
         case V5Op.MOD:
-            return `do local _x=${decB};local _y=${decC};${rVar}[${decA}+1]=${rk("_x")}%${rk("_y")}end`;
+            return `do local _x=${decB};local _y=${decC};${rVar}[${regA}]=${rk("_x")}%${rk("_y")}end`;
         case V5Op.POW:
-            return `do local _x=${decB};local _y=${decC};${rVar}[${decA}+1]=${rk("_x")}^${rk("_y")}end`;
+            return `do local _x=${decB};local _y=${decC};${rVar}[${regA}]=${rk("_x")}^${rk("_y")}end`;
         case V5Op.IDIV:
-            return `do local _x=${decB};local _y=${decC};${rVar}[${decA}+1]=${vmSym.mf}(${rk("_x")}/${rk("_y")})end`;
+            return `do local _x=${decB};local _y=${decC};${rVar}[${regA}]=${vmSym.mf}(${rk("_x")}/${rk("_y")})end`;
         case V5Op.UNM:
-            return `${rVar}[${decA}+1]=-${rVar}[${decB}+1]`;
+            return `${rVar}[${regA}]=-${rVar}[${decB}+${rbVar}]`;
         case V5Op.NOT:
-            return `${rVar}[${decA}+1]=not ${rVar}[${decB}+1]`;
+            return `${rVar}[${regA}]=not ${rVar}[${decB}+${rbVar}]`;
         case V5Op.LEN:
-            return `${rVar}[${decA}+1]=#${rVar}[${decB}+1]`;
+            return `${rVar}[${regA}]=#${rVar}[${decB}+${rbVar}]`;
         case V5Op.CONCAT:
-            return `do local _b=${decB};local _e=${decC};local _acc=${rVar}[_e+1];for _i=_e-1,_b,-1 do _acc=${rVar}[_i+1].._acc end;${rVar}[${decA}+1]=_acc end`;
+            return `do local _b=${decB};local _e=${decC};local _acc=${rVar}[_e+${rbVar}];for _i=_e-1,_b,-1 do _acc=${rVar}[_i+${rbVar}].._acc end;${rVar}[${regA}]=_acc end`;
         case V5Op.JMP:
-            return `${yieldChk}${pcVar}=${decB}`;
+            return `${yieldChk}${pcVar}=${decB}${stJump}`;
+        case V5Op.JMP_V2:
+            return `${yieldChk}${pcVar}=${decC}${stJump}`;
         case V5Op.EQ:
             return `do local _x=${decB};local _y=${decC};if(${rk("_x")}==${rk("_y")})~=(${decA}~=0)then ${pcVar}=${pcVar}+1 end end`;
         case V5Op.LT:
@@ -216,180 +255,318 @@ function buildOpcodeHandlerBody(op, modeCfg, vCtx) {
         case V5Op.LE:
             return `do local _x=${decB};local _y=${decC};if(${rk("_x")}<=${rk("_y")})~=(${decA}~=0)then ${pcVar}=${pcVar}+1 end end`;
         case V5Op.TEST:
-            return `if(not ${rVar}[${decA}+1])==(${decC}~=0)then ${pcVar}=${pcVar}+1 end`;
+            return `if(not ${rVar}[${regA}])==(${decC}~=0)then ${pcVar}=${pcVar}+1 end`;
         case V5Op.TESTSET:
-            return `do local _bv=${rVar}[${decB}+1];if(not _bv)==(${decC}~=0)then ${pcVar}=${decD} else ${rVar}[${decA}+1]=_bv end end`;
+            return isFastMode
+                ? `do local _bv=${rVar}[${decB}+${rbVar}];if(not _bv)==(${decC}~=0)then ${pcVar}=${decD} else ${rVar}[${regA}]=_bv end end`
+                : `do local _bv=${rVar}[${decB}+${rbVar}];local _af=${decC};local _fl=(_af%2~=0);local _tp=(_af-(_fl and 1 or 0))/2;if(not _bv)==_fl then ${pcVar}=_tp;${stVar}=${vmSym.bx}(${stVar},${decD}) else ${rVar}[${regA}]=_bv end end`;
         case V5Op.CALL:
-            return `do local _a=${decA};local _f=${rVar}[_a+1];${emitVarCall(decB, decC)}end`;
+            return `do local _pa=${regA};local _f=${rVar}[_pa];${emitVarCall(decB, decC)}end`;
         case V5Op.TAILCALL:
-            return `do local _a=${decA};local _b=${decB};local _f=${rVar}[_a+1];${wipeEp}` +
+            return `do local _pa=${regA};local _b=${decB};local _f=${rVar}[_pa];${wipeEp}` +
                 `if _b==1 then return _f() ` +
-                `elseif _b==2 then return _f(${rVar}[_a+2]) ` +
-                `elseif _b==3 then return _f(${rVar}[_a+2],${rVar}[_a+3]) ` +
-                `elseif _b==4 then return _f(${rVar}[_a+2],${rVar}[_a+3],${rVar}[_a+4]) ` +
-                `elseif _b==0 then return _f(${vmSym.tu}(${rVar},_a+2,${topVar})) ` +
-                `else return _f(${vmSym.tu}(${rVar},_a+2,_a+_b)) end end`;
+                `elseif _b==2 then return _f(${rVar}[_pa+1]) ` +
+                `elseif _b==3 then return _f(${rVar}[_pa+1],${rVar}[_pa+2]) ` +
+                `elseif _b==4 then return _f(${rVar}[_pa+1],${rVar}[_pa+2],${rVar}[_pa+3]) ` +
+                `elseif _b==0 then return _f(${vmSym.tu}(${rVar},_pa+1,${topVar})) ` +
+                `else return _f(${vmSym.tu}(${rVar},_pa+1,_pa+_b-1)) end end`;
         case V5Op.RETURN:
-            return `do local _a=${decA};local _b=${decB};` +
+            return `do local _pa=${regA};local _b=${decB};` +
                 `if _b==1 then ${wipeEp}${recFrame}return ` +
-                `elseif _b==2 then local _r1=${rVar}[_a+1];${wipeEp}${recFrame}return _r1 ` +
-                `elseif _b==3 then local _r1,_r2=${rVar}[_a+1],${rVar}[_a+2];${wipeEp}${recFrame}return _r1,_r2 ` +
-                `elseif _b==0 then ${wipeEp}return ${vmSym.tu}(${rVar},_a+1,${topVar}) ` +
-                `else ${wipeEp}return ${vmSym.tu}(${rVar},_a+1,_a+_b-1) end end`;
+                `elseif _b==2 then local _r1=${rVar}[_pa];${wipeEp}${recFrame}return _r1 ` +
+                `elseif _b==3 then local _r1,_r2=${rVar}[_pa],${rVar}[_pa+1];${wipeEp}${recFrame}return _r1,_r2 ` +
+                `elseif _b==0 then ${wipeEp}return ${vmSym.tu}(${rVar},_pa,${topVar}) ` +
+                `else ${wipeEp}return ${vmSym.tu}(${rVar},_pa,_pa+_b-2) end end`;
+        case V5Op.RETURN_V2:
+            return `do local _pa=${decC}+${rbVar};local _b=${decA};` +
+                `if _b==1 then ${wipeEp}${recFrame}return ` +
+                `elseif _b==2 then local _r1=${rVar}[_pa];${wipeEp}${recFrame}return _r1 ` +
+                `elseif _b==3 then local _r1,_r2=${rVar}[_pa],${rVar}[_pa+1];${wipeEp}${recFrame}return _r1,_r2 ` +
+                `elseif _b==0 then ${wipeEp}return ${vmSym.tu}(${rVar},_pa,${topVar}) ` +
+                `else ${wipeEp}return ${vmSym.tu}(${rVar},_pa,_pa+_b-2) end end`;
         case V5Op.FORPREP:
-            return `do local _a=${decA};${rVar}[_a+1]=${rVar}[_a+1]-${rVar}[_a+3];${pcVar}=${decB} end`;
+            return `do local _pa=${regA};${rVar}[_pa]=${rVar}[_pa]-${rVar}[_pa+2];${pcVar}=${decB}${stJump} end`;
         case V5Op.FORLOOP:
-            return `do ${yieldChk}local _a=${decA};local _st=${rVar}[_a+3];local _ix=${rVar}[_a+1]+_st;${rVar}[_a+1]=_ix;local _lm=${rVar}[_a+2];` +
-                `if(_st>0 and _ix<=_lm)or(_st<=0 and _ix>=_lm)then ${pcVar}=${decB};${rVar}[_a+4]=_ix end end`;
+            return `do ${yieldChk}local _pa=${regA};local _stp=${rVar}[_pa+2];local _ix=${rVar}[_pa]+_stp;${rVar}[_pa]=_ix;local _lm=${rVar}[_pa+1];` +
+                `if(_stp>0 and _ix<=_lm)or(_stp<=0 and _ix>=_lm)then ${pcVar}=${decB}${stJump};${rVar}[_pa+3]=_ix end end`;
         case V5Op.TFORLOOP:
-            return `do ${yieldChk}local _a=${decA};local _c=${decC};local _r={${rVar}[_a+1](${rVar}[_a+2],${rVar}[_a+3])};` +
-                `for _i=1,_c do ${rVar}[_a+3+_i]=_r[_i]end;if _r[1]~=nil then ${rVar}[_a+3]=_r[1];${pcVar}=${decD} end end`;
+            return isFastMode
+                ? `do ${yieldChk}local _pa=${regA};local _c=${decC};local _r={${rVar}[_pa](${rVar}[_pa+1],${rVar}[_pa+2])};` +
+                  `for _i=1,_c do ${rVar}[_pa+2+_i]=_r[_i]end;if _r[1]~=nil then ${rVar}[_pa+2]=_r[1];${pcVar}=${decD} end end`
+                : `do ${yieldChk}local _pa=${regA};local _c=${decC};local _r={${rVar}[_pa](${rVar}[_pa+1],${rVar}[_pa+2])};` +
+                  `for _i=1,_c do ${rVar}[_pa+2+_i]=_r[_i]end;if _r[1]~=nil then ${rVar}[_pa+2]=_r[1];${pcVar}=${decB}${stJump} end end`;
         case V5Op.ITERPREP:
-            return `do local _a=${decA};local _it=${rVar}[_a+1];local _ity=${vmSym.ty}(_it);` +
+            return `do local _pa=${regA};local _it=${rVar}[_pa];local _ity=${vmSym.ty}(_it);` +
                 `if _ity=="table"or _ity=="userdata"then local _ok,_mt=${vmSym.pc}(${vmSym.gm},_it);` +
-                `if _ok and ${vmSym.ty}(_mt)=="table"and _mt.__iter then ${rVar}[_a+1],${rVar}[_a+2],${rVar}[_a+3]=_mt.__iter(_it)` +
-                `elseif _ity=="table"then ${rVar}[_a+1]=${vmSym.nx};${rVar}[_a+2]=_it;${rVar}[_a+3]=nil end end end`;
+                `if _ok and ${vmSym.ty}(_mt)=="table"and _mt.__iter then ${rVar}[_pa],${rVar}[_pa+1],${rVar}[_pa+2]=_mt.__iter(_it)` +
+                `elseif _ity=="table"then ${rVar}[_pa]=${vmSym.nx};${rVar}[_pa+1]=_it;${rVar}[_pa+2]=nil end end end`;
         case V5Op.SETLIST:
-            return `do local _a=${decA};local _t=${rVar}[_a+1];local _b=${decB};if _b==0 then _b=${topVar}-(_a+1)end;local _bs=${decC}-1;for _i=1,_b do _t[_bs+_i]=${rVar}[_a+1+_i]end end`;
+            return `do local _pa=${regA};local _t=${rVar}[_pa];local _b=${decB};if _b==0 then _b=${topVar}-_pa end;local _bs=${decC}-1;for _i=1,_b do _t[_bs+_i]=${rVar}[_pa+_i]end end`;
         case V5Op.CLOSURE:
             return `do local _pr=${poolVar}[_pr[7][${decB}+1]];` +
                 `if _pr then local _nU={};local _ul=_pr[6];for _ui=1,#_ul do local _ud=_ul[_ui];` +
-                `if _ud[1]==1 then if not ${openUvVar} then ${openUvVar}={} end;local _bk;local _tg=_ud[2]+1;for _oi=1,#${openUvVar} do if ${openUvVar}[_oi][2]==_tg then _bk=${openUvVar}[_oi];break end end;` +
+                `if _ud[1]==1 then if not ${openUvVar} then ${openUvVar}={} end;local _bk;local _tg=_ud[2]+${rbVar};for _oi=1,#${openUvVar} do if ${openUvVar}[_oi][2]==_tg then _bk=${openUvVar}[_oi];break end end;` +
                 `if not _bk then _bk={${rVar},_tg};${openUvVar}[#${openUvVar}+1]=_bk end;_nU[_ui]=_bk else _nU[_ui]=${upVar}[_ud[2]+1]end end;` +
                 `if not _pr[4]and _pr[2]<=4 then local _np=_pr[2];` +
-                `if _np==0 then ${rVar}[${decA}+1]=function()return _vm(_pr,_nU,${envVar})end ` +
-                `elseif _np==1 then ${rVar}[${decA}+1]=function(_1)return _vm(_pr,_nU,${envVar},_1)end ` +
-                `elseif _np==2 then ${rVar}[${decA}+1]=function(_1,_2)return _vm(_pr,_nU,${envVar},_1,_2)end ` +
-                `elseif _np==3 then ${rVar}[${decA}+1]=function(_1,_2,_3)return _vm(_pr,_nU,${envVar},_1,_2,_3)end ` +
-                `else ${rVar}[${decA}+1]=function(_1,_2,_3,_4)return _vm(_pr,_nU,${envVar},_1,_2,_3,_4)end end ` +
-                `else ${rVar}[${decA}+1]=function(...)local _ac=${vmSym.sel}("#",...);local _ag={...};return _vm(_pr,_nU,${envVar},_ag[1],_ag[2],_ag[3],_ag[4],_ag,_ac)end end ` +
-                `else ${rVar}[${decA}+1]=nil end end`;
+                `if _np==0 then ${rVar}[${regA}]=function()return _vm(_pr,_nU,${envVar})end ` +
+                `elseif _np==1 then ${rVar}[${regA}]=function(_1)return _vm(_pr,_nU,${envVar},_1)end ` +
+                `elseif _np==2 then ${rVar}[${regA}]=function(_1,_2)return _vm(_pr,_nU,${envVar},_1,_2)end ` +
+                `elseif _np==3 then ${rVar}[${regA}]=function(_1,_2,_3)return _vm(_pr,_nU,${envVar},_1,_2,_3)end ` +
+                `else ${rVar}[${regA}]=function(_1,_2,_3,_4)return _vm(_pr,_nU,${envVar},_1,_2,_3,_4)end end ` +
+                `else ${rVar}[${regA}]=function(...)local _ac=${vmSym.sel}("#",...);local _ag={...};return _vm(_pr,_nU,${envVar},_ag[1],_ag[2],_ag[3],_ag[4],_ag,_ac)end end ` +
+                `else ${rVar}[${regA}]=nil end end`;
         case V5Op.VARARG:
-            return `do local _a=${decA};local _b=${decB};if _b==0 then if _vac>0 then for _i=1,_vac do ${rVar}[_a+_i]=_va[_i] end end;${topVar}=_a+_vac else for _i=1,_b-1 do ${rVar}[_a+_i]=_va and _va[_i]or nil end end end`;
+            return `do local _pa=${regA};local _b=${decB};if _b==0 then if _vac>0 then for _i=1,_vac do ${rVar}[_pa+_i-1]=_va[_i] end end;${topVar}=_pa+_vac-1 else for _i=1,_b-1 do ${rVar}[_pa+_i-1]=_va and _va[_i]or nil end end end`;
         case V5Op.SELF:
-            return `do local _a=${decA};local _o=${rVar}[${decB}+1];local _fc=${decC};${rVar}[_a+2]=_o;${rVar}[_a+1]=_o[${rk("_fc")}]end`;
+            return `do local _pa=${regA};local _o=${rVar}[${decB}+${rbVar}];local _fc=${decC};${rVar}[_pa+1]=_o;${rVar}[_pa]=_o[${rk("_fc")}]end`;
         case V5Op.GETUPVAL:
-            return `do local _b=${upVar}[${decB}+1];if _b[2]then ${rVar}[${decA}+1]=_b[1][_b[2]]else ${rVar}[${decA}+1]=_b[1]end end`;
+            return `do local _b=${upVar}[${decB}+1];if _b[2]then ${rVar}[${regA}]=_b[1][_b[2]]else ${rVar}[${regA}]=_b[1]end end`;
         case V5Op.SETUPVAL:
-            return `do local _b=${upVar}[${decB}+1];if _b[2]then _b[1][_b[2]]=${rVar}[${decA}+1]else _b[1]=${rVar}[${decA}+1]end end`;
+            return `do local _b=${upVar}[${decB}+1];if _b[2]then _b[1][_b[2]]=${rVar}[${regA}]else _b[1]=${rVar}[${regA}]end end`;
         case V5Op.CLOSEUPVAL:
-            return `if ${openUvVar} then do local _a=${decA}+1;local _n=0;for _i=1,#${openUvVar} do local _b=${openUvVar}[_i];if _b[2]>=_a then _b[1]=_b[1][_b[2]];_b[2]=nil else _n=_n+1;${openUvVar}[_n]=_b end end;for _i=_n+1,#${openUvVar} do ${openUvVar}[_i]=nil end end end`;
+            return `if ${openUvVar} then do local _pa=${regA};local _n=0;for _i=1,#${openUvVar} do local _b=${openUvVar}[_i];if _b[2]>=_pa then _b[1]=_b[1][_b[2]];_b[2]=nil else _n=_n+1;${openUvVar}[_n]=_b end end;for _i=_n+1,#${openUvVar} do ${openUvVar}[_i]=nil end end end`;
         case V5Op.PCALL:
-            return `do local _a=${decA};local _b=${decB};local _c=${decC};local _f=${rVar}[_a+1];local _we=_b==0 and ${topVar} or _a+_b;local _r;` +
+            return `do local _pa=${regA};local _b=${decB};local _c=${decC};local _f=${rVar}[_pa];local _we=_b==0 and ${topVar} or _pa+_b-1;local _r;` +
                 `if _b==1 then _r=${vmSym.tp}(${vmSym.pc}(_f)) ` +
-                `elseif _b==2 then _r=${vmSym.tp}(${vmSym.pc}(_f,${rVar}[_a+2])) ` +
-                `elseif _b==3 then _r=${vmSym.tp}(${vmSym.pc}(_f,${rVar}[_a+2],${rVar}[_a+3])) ` +
-                `else _r=${vmSym.tp}(${vmSym.pc}(_f,${vmSym.tu}(${rVar},_a+2,_we))) end;` +
-                `if _c==0 then for _i=1,_r.n do ${rVar}[_a+_i]=_r[_i] end;${topVar}=_a+_r.n else for _i=1,_c-1 do ${rVar}[_a+_i]=_r[_i] end end;` +
-                `if _b==0 or _b>1 then local _ws=_c==0 and(_a+_r.n+1)or(_a+_c);for _wi=_ws,_we do ${rVar}[_wi]=nil end end end`;
+                `elseif _b==2 then _r=${vmSym.tp}(${vmSym.pc}(_f,${rVar}[_pa+1])) ` +
+                `elseif _b==3 then _r=${vmSym.tp}(${vmSym.pc}(_f,${rVar}[_pa+1],${rVar}[_pa+2])) ` +
+                `else _r=${vmSym.tp}(${vmSym.pc}(_f,${vmSym.tu}(${rVar},_pa+1,_we))) end;` +
+                `if _c==0 then for _i=1,_r.n do ${rVar}[_pa+_i-1]=_r[_i] end;${topVar}=_pa+_r.n-1 else for _i=1,_c-1 do ${rVar}[_pa+_i-1]=_r[_i] end end;` +
+                `if _b==0 or _b>1 then local _ws=_c==0 and(_pa+_r.n)or(_pa+_c-1);for _wi=_ws,_we do ${rVar}[_wi]=nil end end end`;
         case V5Op.XPCALL:
-            return `do local _a=${decA};local _b=${decB};local _c=${decC};local _f=${rVar}[_a+1];local _eh=${rVar}[_a+2];local _we=_b==0 and ${topVar} or _a+_b;local _r;` +
+            return `do local _pa=${regA};local _b=${decB};local _c=${decC};local _f=${rVar}[_pa];local _eh=${rVar}[_pa+1];local _we=_b==0 and ${topVar} or _pa+_b-1;local _r;` +
                 `if _b==1 or _b==2 then _r=${vmSym.tp}(${vmSym.xpc}(_f,_eh)) ` +
-                `elseif _b==3 then _r=${vmSym.tp}(${vmSym.xpc}(_f,_eh,${rVar}[_a+3])) ` +
-                `else _r=${vmSym.tp}(${vmSym.xpc}(_f,_eh,${vmSym.tu}(${rVar},_a+3,_we))) end;` +
-                `if _c==0 then for _i=1,_r.n do ${rVar}[_a+_i]=_r[_i] end;${topVar}=_a+_r.n else for _i=1,_c-1 do ${rVar}[_a+_i]=_r[_i] end end;` +
-                `if _b==0 or _b>2 then local _ws=_c==0 and(_a+_r.n+1)or(_a+_c);for _wi=_ws,_we do ${rVar}[_wi]=nil end end end`;
+                `elseif _b==3 then _r=${vmSym.tp}(${vmSym.xpc}(_f,_eh,${rVar}[_pa+2])) ` +
+                `else _r=${vmSym.tp}(${vmSym.xpc}(_f,_eh,${vmSym.tu}(${rVar},_pa+2,_we))) end;` +
+                `if _c==0 then for _i=1,_r.n do ${rVar}[_pa+_i-1]=_r[_i] end;${topVar}=_pa+_r.n-1 else for _i=1,_c-1 do ${rVar}[_pa+_i-1]=_r[_i] end end;` +
+                `if _b==0 or _b>2 then local _ws=_c==0 and(_pa+_r.n)or(_pa+_c-1);for _wi=_ws,_we do ${rVar}[_wi]=nil end end end`;
         case V5Op.F_TEST_JMP:
-            return `if(not ${rVar}[${decA}+1])~=(${decC}~=0)then ${pcVar}=${decB} end`;
+            return `if(not ${rVar}[${regA}])~=(${decC}~=0)then ${pcVar}=${decB}${stJump} end`;
+        case V5Op.F_TEST_JMP_V2:
+            return `if(not ${rVar}[${decC}+${rbVar}])~=(${decB}~=0)then ${pcVar}=${decA}${stJump} end`;
         case V5Op.F_EQ_JMP:
-            return `do local _x=${decB};local _y=${decC};if(${rk("_x")}==${rk("_y")})==(${decA}~=0)then ${pcVar}=${decD} end end`;
+            return packedBranch(decA, "==", rk, rk);
+        case V5Op.F_EQ_JMP_V2:
+            return isFastMode
+                ? `do local _x=${decA};local _y=${decB};if(${rk("_x")}==${rk("_y")})==(${decC}~=0)then ${pcVar}=${decD} end end`
+                : `do local _x=${decA};local _y=${decB};local _af=${decC};local _fl=(_af%2~=0);local _tp=(_af-(_fl and 1 or 0))/2;if(${rk("_x")}==${rk("_y")})==_fl then ${pcVar}=_tp;${stVar}=${vmSym.bx}(${stVar},${decD})end end`;
         case V5Op.F_LT_JMP:
-            return `do local _x=${decB};local _y=${decC};if(${rk("_x")}<${rk("_y")})==(${decA}~=0)then ${pcVar}=${decD} end end`;
+            return packedBranch(decA, "<", rk, rk);
         case V5Op.F_LE_JMP:
-            return `do local _x=${decB};local _y=${decC};if(${rk("_x")}<=${rk("_y")})==(${decA}~=0)then ${pcVar}=${decD} end end`;
+            return packedBranch(decA, "<=", rk, rk);
         case V5Op.F_TESTSET_JMP:
-            return `do local _bv=${rVar}[${decB}+1];if(not _bv)~=(${decC}~=0)then ${rVar}[${decA}+1]=_bv;${pcVar}=${decD} end end`;
+            return isFastMode
+                ? `do local _bv=${rVar}[${decB}+${rbVar}];if(not _bv)~=(${decC}~=0)then ${rVar}[${regA}]=_bv;${pcVar}=${decD} end end`
+                : `do local _bv=${rVar}[${decB}+${rbVar}];local _af=${decC};local _fl=(_af%2~=0);local _tp=(_af-(_fl and 1 or 0))/2;if(not _bv)~=_fl then ${rVar}[${regA}]=_bv;${pcVar}=_tp;${stVar}=${vmSym.bx}(${stVar},${decD})end end`;
         case V5Op.F_TFORLOOP_JMP:
-            return `do ${yieldChk}local _a=${decA};local _c=${decC};local _r={${rVar}[_a+1](${rVar}[_a+2],${rVar}[_a+3])};` +
-                `for _i=1,_c do ${rVar}[_a+3+_i]=_r[_i]end;if _r[1]~=nil then ${rVar}[_a+3]=_r[1]else ${pcVar}=${decB} end end`;
+            return `do ${yieldChk}local _pa=${regA};local _c=${decC};local _r={${rVar}[_pa](${rVar}[_pa+1],${rVar}[_pa+2])};` +
+                `for _i=1,_c do ${rVar}[_pa+2+_i]=_r[_i]end;if _r[1]~=nil then ${rVar}[_pa+2]=_r[1]else ${pcVar}=${decB}${stJump} end end`;
         case V5Op.F_GGET:
-            return `do local _g=${envVar}[${kVar}[${decB}+1]];${rVar}[${decA}+1]=_g;local _t=${decD};${rVar}[${decC}+1]=_g[${rk("_t")}]end`;
+            return `do local _g=${envVar}[${kVar}[${decB}+${kbVar}]];${rVar}[${regA}]=_g;local _t=${decD};${rVar}[${decC}+${rbVar}]=_g[${rk("_t")}]end`;
         case V5Op.F_LOADKK:
-            return `${rVar}[${decA}+1]=${kVar}[${decB}+1];${rVar}[${decC}+1]=${kVar}[${decD}+1]`;
+            return `${rVar}[${regA}]=${kVar}[${decB}+${kbVar}];${rVar}[${decC}+${rbVar}]=${kVar}[${decD}+${kbVar}]`;
         case V5Op.F_MOVE_MOVE:
-            return `${rVar}[${decA}+1]=${rVar}[${decB}+1];${rVar}[${decC}+1]=${rVar}[${decD}+1]`;
+            return `${rVar}[${regA}]=${rVar}[${decB}+${rbVar}];${rVar}[${decC}+${rbVar}]=${rVar}[${decD}+${rbVar}]`;
         case V5Op.F_SELF_CALL:
-            return `do local _a=${decA};local _o=${rVar}[${decB}+1];local _fc=${decC};local _d=${decD};${rVar}[_a+2]=_o;local _f=_o[${rk("_fc")}];${rVar}[_a+1]=_f;` +
+            return `do local _pa=${regA};local _o=${rVar}[${decB}+${rbVar}];local _fc=${decC};local _d=${decD};${rVar}[_pa+1]=_o;local _f=_o[${rk("_fc")}];${rVar}[_pa]=_f;` +
                 `${emitVarCall(`${vmSym.rs}(_d,16)`, `${vmSym.ba}(_d,65535)`)}end`;
         case V5Op.F_GGET_CALL:
-            return `do local _a=${decA};local _g=${envVar}[${kVar}[${decB}+1]];local _fc=${decC};local _d=${decD};local _f=_g[${rk("_fc")}];${rVar}[_a+1]=_f;` +
+            return `do local _pa=${regA};local _g=${envVar}[${kVar}[${decB}+${kbVar}]];local _fc=${decC};local _d=${decD};local _f=_g[${rk("_fc")}];${rVar}[_pa]=_f;` +
                 `${emitVarCall(`${vmSym.rs}(_d,16)`, `${vmSym.ba}(_d,65535)`)}end`;
         case V5Op.F_LOADK_RET:
-            return `do local _r1=${kVar}[${decB}+1];${wipeEp}${recFrame}return _r1 end`;
+            return `do local _r1=${kVar}[${decB}+${kbVar}];${wipeEp}${recFrame}return _r1 end`;
         case V5Op.F_MOVE_RET:
-            return `do ${rVar}[${decA}+1]=${rVar}[${decB}+1];local _ra=${decC};local _rb=${decD};` +
-                `if _rb==1 then ${wipeEp}${recFrame}return ` +
-                `elseif _rb==2 then local _r1=${rVar}[_ra+1];${wipeEp}${recFrame}return _r1 ` +
-                `elseif _rb==0 then ${wipeEp}return ${vmSym.tu}(${rVar},_ra+1,${topVar}) ` +
-                `else ${wipeEp}return ${vmSym.tu}(${rVar},_ra+1,_ra+_rb-1) end end`;
+            return `do ${rVar}[${regA}]=${rVar}[${decB}+${rbVar}];local _pa=${decC}+${rbVar};local _rb2=${decD};` +
+                `if _rb2==1 then ${wipeEp}${recFrame}return ` +
+                `elseif _rb2==2 then local _r1=${rVar}[_pa];${wipeEp}${recFrame}return _r1 ` +
+                `elseif _rb2==0 then ${wipeEp}return ${vmSym.tu}(${rVar},_pa,${topVar}) ` +
+                `else ${wipeEp}return ${vmSym.tu}(${rVar},_pa,_pa+_rb2-2) end end`;
         case V5Op.S_CALL0:
-            return `do local _a=${decA};${rVar}[_a+1]=${rVar}[_a+1]()end`;
+            return `do local _pa=${regA};${rVar}[_pa]=${rVar}[_pa]()end`;
         case V5Op.S_CALL1:
-            return `do local _a=${decA};${rVar}[_a+1]=${rVar}[_a+1](${rVar}[_a+2])end`;
+            return `do local _pa=${regA};${rVar}[_pa]=${rVar}[_pa](${rVar}[_pa+1])end`;
         case V5Op.S_CALL2:
-            return `do local _a=${decA};${rVar}[_a+1]=${rVar}[_a+1](${rVar}[_a+2],${rVar}[_a+3])end`;
+            return `do local _pa=${regA};${rVar}[_pa]=${rVar}[_pa](${rVar}[_pa+1],${rVar}[_pa+2])end`;
         case V5Op.S_CALL0_VOID:
-            return `do local _a=${decA};${rVar}[_a+1]()end`;
+            return `do local _pa=${regA};${rVar}[_pa]()end`;
         case V5Op.S_CALL1_VOID:
-            return `do local _a=${decA};${rVar}[_a+1](${rVar}[_a+2])end`;
+            return `do local _pa=${regA};${rVar}[_pa](${rVar}[_pa+1])end`;
         case V5Op.S_CALL2_VOID:
-            return `do local _a=${decA};${rVar}[_a+1](${rVar}[_a+2],${rVar}[_a+3])end`;
+            return `do local _pa=${regA};${rVar}[_pa](${rVar}[_pa+1],${rVar}[_pa+2])end`;
         case V5Op.S_CALL3:
-            return `do local _a=${decA};${rVar}[_a+1]=${rVar}[_a+1](${rVar}[_a+2],${rVar}[_a+3],${rVar}[_a+4])end`;
+            return `do local _pa=${regA};${rVar}[_pa]=${rVar}[_pa](${rVar}[_pa+1],${rVar}[_pa+2],${rVar}[_pa+3])end`;
         case V5Op.S_GETFIELD_K:
-            return `${rVar}[${decA}+1]=${rVar}[${decB}+1][${kVar}[${decC}+1]]`;
+            return `${rVar}[${regA}]=${rVar}[${decB}+${rbVar}][${kVar}[${decC}+${kbVar}]]`;
         case V5Op.S_SETFIELD_K:
-            return `do local _v=${decC};${rVar}[${decA}+1][${kVar}[${decB}+1]]=${rk("_v")}end`;
+            return `do local _v=${decC};${rVar}[${regA}][${kVar}[${decB}+${kbVar}]]=${rk("_v")}end`;
         case V5Op.S_UPVAL_GET:
-            return `do local _b=${upVar}[${decB}+1];local _uv=(_b[2]and _b[1][_b[2]]or _b[1]);${rVar}[${decA}+1]=_uv;local _t=${decD};${rVar}[${decC}+1]=_uv[${rk("_t")}]end`;
+            return `do local _b=${upVar}[${decB}+1];local _uv=(_b[2]and _b[1][_b[2]]or _b[1]);${rVar}[${regA}]=_uv;local _t=${decD};${rVar}[${decC}+${rbVar}]=_uv[${rk("_t")}]end`;
         case V5Op.S_ADD_K:
-            return `${rVar}[${decA}+1]=${rVar}[${decB}+1]+${kVar}[${decC}+1]`;
+            return `${rVar}[${regA}]=${rVar}[${decB}+${rbVar}]+${kVar}[${decC}+${kbVar}]`;
         case V5Op.S_SUB_K:
-            return `${rVar}[${decA}+1]=${rVar}[${decB}+1]-${kVar}[${decC}+1]`;
+            return `${rVar}[${regA}]=${rVar}[${decB}+${rbVar}]-${kVar}[${decC}+${kbVar}]`;
         case V5Op.S_MUL_K:
-            return `${rVar}[${decA}+1]=${rVar}[${decB}+1]*${kVar}[${decC}+1]`;
+            return `${rVar}[${regA}]=${rVar}[${decB}+${rbVar}]*${kVar}[${decC}+${kbVar}]`;
         case V5Op.S_MOD_K:
-            return `${rVar}[${decA}+1]=${rVar}[${decB}+1]%${kVar}[${decC}+1]`;
+            return `${rVar}[${regA}]=${rVar}[${decB}+${rbVar}]%${kVar}[${decC}+${kbVar}]`;
+        case V5Op.F_NEWTAB_SET:
+            return `do local _v=${decC};local _t={};_t[${kVar}[${decB}+${kbVar}]]=${rk("_v")};${rVar}[${regA}]=_t end`;
+        case V5Op.F_GGET_SET:
+            return `do local _v=${decA};local _g=${envVar}[${kVar}[${decB}+${kbVar}]];${rVar}[${decD}+${rbVar}]=_g;_g[${kVar}[${decC}+${kbVar}]]=${rk("_v")}end`;
+        case V5Op.F_LOADK_CALL1:
+            return `do local _pa=${regA};local _kv=${kVar}[${decB}+${kbVar}];${rVar}[_pa+1]=_kv;${rVar}[_pa]=${rVar}[_pa](_kv)end`;
+        case V5Op.F_LOADK_CALL1_VOID:
+            return `do local _pa=${regA};local _kv=${kVar}[${decB}+${kbVar}];${rVar}[_pa+1]=_kv;${rVar}[_pa](_kv)end`;
         case V5Op.OP_MODE_SWITCH:
-            return `${pcVar}=${decA};${modeVar}=${decB}`;
-        case V5Op.OP_DECRYPT_BLK: {
-            const nopStored = (modeCfg.opEncode[V5Op.NOP] ^ vCtx.kLo ^ modeCfg.mSalt) >>> 0;
-            const c0 = slots[0], c1 = slots[1], c2 = slots[2], c3 = slots[3], c4 = slots[4];
-            return `do local _ln=${decA};local _l=${vmSym.bx}(${decB},${kSecVar});` +
-                `for _k=1,_ln do local _idx=_q+_k;` +
+            return `${pcVar}=${decA};${modeVar}=${decB}${stJump}`;
+        case V5Op.OP_BLK_ENTER: {
+            const stepStored = (modeCfg.opEncode[V5Op.OP_STATE_STEP] ^ vCtx.kLo ^ modeCfg.mSalt) >>> 0;
+            const c0 = cArrVars[0], c1 = cArrVars[1], c2 = cArrVars[2], c3 = cArrVars[3], c4 = cArrVars[4];
+            return `do local _ln=${vmSym.bx}(${decA},${vmSym.ba}(${stVar},65535));local _l=${vmSym.bx}(${stVar},${vmSym.bx}(${decB},${k1Var}));` +
+                `for _k=1,_ln do local _idx=${qVar}+_k;` +
                 `_l=(${uSym.ta}(_l,1664525)+1013904223)%4294967296;${c0}[_idx]=${vmSym.bx}(${c0}[_idx],_l);` +
                 `_l=(${uSym.ta}(_l,1664525)+1013904223)%4294967296;${c1}[_idx]=${vmSym.bx}(${c1}[_idx],_l);` +
                 `_l=(${uSym.ta}(_l,1664525)+1013904223)%4294967296;${c2}[_idx]=${vmSym.bx}(${c2}[_idx],_l);` +
                 `_l=(${uSym.ta}(_l,1664525)+1013904223)%4294967296;${c3}[_idx]=${vmSym.bx}(${c3}[_idx],_l);` +
                 `_l=(${uSym.ta}(_l,1664525)+1013904223)%4294967296;${c4}[_idx]=${vmSym.bx}(${c4}[_idx],_l)end;` +
-                `${sOp}[_q]=${vmSym.bx}(${nopStored ^ vCtx.kLo},_kLo)end`;
+                `${sOp}[${qVar}]=${vmSym.bx}(${stepStored ^ vCtx.kLo},_kLo);${stVar}=${vmSym.bx}(${stVar},${decC})end`;
         }
+        case V5Op.OP_STATE_STEP:
+            return `${stVar}=${vmSym.bx}(${stVar},${decC})`;
+        case V5Op.M_TAB_SUB_NOT: {
+            const tags = mergeTags[V5Op.M_TAB_SUB_NOT];
+            const branches = [
+                { t: tags[0], c: `local _t=${decC};${rVar}[${regA}]=${rVar}[${decB}+${rbVar}][${rk("_t")}]` },
+                { t: tags[1], c: `local _x=${decB};local _y=${decC};${rVar}[${regA}]=${rk("_x")}-${rk("_y")}` },
+                { t: tags[2], c: `${rVar}[${regA}]=not ${rVar}[${decB}+${rbVar}]` },
+            ];
+            for (let i = branches.length - 1; i > 0; i--) {
+                const j = Math.floor(rng() * (i + 1));
+                [branches[i], branches[j]] = [branches[j], branches[i]];
+            }
+            return `do local _td=${decD};if _td==${branches[0].t} then ${branches[0].c} elseif _td==${branches[1].t} then ${branches[1].c} else ${branches[2].c} end end`;
+        }
+        case V5Op.M_SET_ADD_LEN: {
+            const tags = mergeTags[V5Op.M_SET_ADD_LEN];
+            const branches = [
+                { t: tags[0], c: `local _k=${decB};local _v=${decC};${rVar}[${regA}][${rk("_k")}]=${rk("_v")}` },
+                { t: tags[1], c: `local _x=${decB};local _y=${decC};${rVar}[${regA}]=${rk("_x")}+${rk("_y")}` },
+                { t: tags[2], c: `${rVar}[${regA}]=#${rVar}[${decB}+${rbVar}]` },
+            ];
+            for (let i = branches.length - 1; i > 0; i--) {
+                const j = Math.floor(rng() * (i + 1));
+                [branches[i], branches[j]] = [branches[j], branches[i]];
+            }
+            return `do local _td=${decD};if _td==${branches[0].t} then ${branches[0].c} elseif _td==${branches[1].t} then ${branches[1].c} else ${branches[2].c} end end`;
+        }
+        case V5Op.M_ENV_MOV_UNM: {
+            const tags = mergeTags[V5Op.M_ENV_MOV_UNM];
+            const branches = [
+                { t: tags[0], c: `${rVar}[${regA}]=${envVar}[${kVar}[${decB}+${kbVar}]]` },
+                { t: tags[1], c: `${rVar}[${regA}]=${rVar}[${decB}+${rbVar}]` },
+                { t: tags[2], c: `${rVar}[${regA}]=-${rVar}[${decB}+${rbVar}]` },
+            ];
+            for (let i = branches.length - 1; i > 0; i--) {
+                const j = Math.floor(rng() * (i + 1));
+                [branches[i], branches[j]] = [branches[j], branches[i]];
+            }
+            return `do local _td=${decD};if _td==${branches[0].t} then ${branches[0].c} elseif _td==${branches[1].t} then ${branches[1].c} else ${branches[2].c} end end`;
+        }
+        case V5Op.M_LDK_MUL_SGL: {
+            const tags = mergeTags[V5Op.M_LDK_MUL_SGL];
+            const branches = [
+                { t: tags[0], c: `${rVar}[${regA}]=${kVar}[${decB}+${kbVar}]` },
+                { t: tags[1], c: `local _x=${decB};local _y=${decC};${rVar}[${regA}]=${rk("_x")}*${rk("_y")}` },
+                { t: tags[2], c: `${envVar}[${kVar}[${decB}+${kbVar}]]=${rVar}[${regA}]` },
+            ];
+            for (let i = branches.length - 1; i > 0; i--) {
+                const j = Math.floor(rng() * (i + 1));
+                [branches[i], branches[j]] = [branches[j], branches[i]];
+            }
+            return `do local _td=${decD};if _td==${branches[0].t} then ${branches[0].c} elseif _td==${branches[1].t} then ${branches[1].c} else ${branches[2].c} end end`;
+        }
+        case V5Op.M_DIV_MOD_GUP: {
+            const tags = mergeTags[V5Op.M_DIV_MOD_GUP];
+            const branches = [
+                { t: tags[0], c: `local _x=${decB};local _y=${decC};${rVar}[${regA}]=${rk("_x")}/${rk("_y")}` },
+                { t: tags[1], c: `local _x=${decB};local _y=${decC};${rVar}[${regA}]=${rk("_x")}%${rk("_y")}` },
+                { t: tags[2], c: `local _b=${upVar}[${decB}+1];if _b[2]then ${rVar}[${regA}]=_b[1][_b[2]]else ${rVar}[${regA}]=_b[1]end` },
+            ];
+            for (let i = branches.length - 1; i > 0; i--) {
+                const j = Math.floor(rng() * (i + 1));
+                [branches[i], branches[j]] = [branches[j], branches[i]];
+            }
+            return `do local _td=${decD};if _td==${branches[0].t} then ${branches[0].c} elseif _td==${branches[1].t} then ${branches[1].c} else ${branches[2].c} end end`;
+        }
+        case V5Op.M_CAT_POW_SUP: {
+            const tags = mergeTags[V5Op.M_CAT_POW_SUP];
+            const branches = [
+                { t: tags[0], c: `local _b=${decB};local _e=${decC};local _acc=${rVar}[_e+${rbVar}];for _i=_e-1,_b,-1 do _acc=${rVar}[_i+${rbVar}].._acc end;${rVar}[${regA}]=_acc` },
+                { t: tags[1], c: `local _x=${decB};local _y=${decC};${rVar}[${regA}]=${rk("_x")}^${rk("_y")}` },
+                { t: tags[2], c: `local _x=${decB};local _y=${decC};${rVar}[${regA}]=${vmSym.mf}(${rk("_x")}/${rk("_y")})` },
+                { t: tags[3], c: `local _b=${upVar}[${decB}+1];if _b[2]then _b[1][_b[2]]=${rVar}[${regA}]else _b[1]=${rVar}[${regA}]end` },
+            ];
+            for (let i = branches.length - 1; i > 0; i--) {
+                const j = Math.floor(rng() * (i + 1));
+                [branches[i], branches[j]] = [branches[j], branches[i]];
+            }
+            return `do local _td=${decD};if _td==${branches[0].t} then ${branches[0].c} elseif _td==${branches[1].t} then ${branches[1].c} elseif _td==${branches[2].t} then ${branches[2].c} else ${branches[3].c} end end`;
+        }
+        case V5Op.U_PROTO_FETCH:
+            return `do local _cp=${poolVar}[_pr[7][${decB}+1]];${rVar}[${regA}]=_cp and{_cp,{}}or nil end`;
+        case V5Op.U_UPVAL_BIND:
+            return `do local _t=${rVar}[${regA}];if _t then local _ul=_t[1][6];local _nU=_t[2];for _ui=1,#_ul do local _ud=_ul[_ui];` +
+                `if _ud[1]==1 then if not ${openUvVar} then ${openUvVar}={} end;local _bk;local _tg=_ud[2]+${rbVar};for _oi=1,#${openUvVar} do if ${openUvVar}[_oi][2]==_tg then _bk=${openUvVar}[_oi];break end end;` +
+                `if not _bk then _bk={${rVar},_tg};${openUvVar}[#${openUvVar}+1]=_bk end;_nU[_ui]=_bk else _nU[_ui]=${upVar}[_ud[2]+1]end end end end`;
+        case V5Op.U_CLOSURE_WRAP:
+            return `do local _tb=${decB}+${rbVar};local _t=${rVar}[_tb];${rVar}[_tb]=nil;if _t then local _cp,_nU=_t[1],_t[2];` +
+                `if not _cp[4]and _cp[2]<=4 then local _np=_cp[2];` +
+                `if _np==0 then ${rVar}[${regA}]=function()return _vm(_cp,_nU,${envVar})end ` +
+                `elseif _np==1 then ${rVar}[${regA}]=function(_1)return _vm(_cp,_nU,${envVar},_1)end ` +
+                `elseif _np==2 then ${rVar}[${regA}]=function(_1,_2)return _vm(_cp,_nU,${envVar},_1,_2)end ` +
+                `elseif _np==3 then ${rVar}[${regA}]=function(_1,_2,_3)return _vm(_cp,_nU,${envVar},_1,_2,_3)end ` +
+                `else ${rVar}[${regA}]=function(_1,_2,_3,_4)return _vm(_cp,_nU,${envVar},_1,_2,_3,_4)end end ` +
+                `else ${rVar}[${regA}]=function(...)local _ac=${vmSym.sel}("#",...);local _ag={...};return _vm(_cp,_nU,${envVar},_ag[1],_ag[2],_ag[3],_ag[4],_ag,_ac)end end ` +
+                `else ${rVar}[${regA}]=nil end end`;
+        case V5Op.U_FOR_STEP:
+            return `do ${yieldChk}local _pa=${regA};local _stp=${rVar}[_pa+2];local _ix=${rVar}[_pa]+_stp;${rVar}[_pa]=_ix;local _lm=${rVar}[_pa+1];` +
+                `local _ok=(_stp>0 and _ix<=_lm)or(_stp<=0 and _ix>=_lm);if _ok then ${rVar}[_pa+3]=_ix end;${rVar}[${decB}+${rbVar}]=_ok end`;
+        case V5Op.U_TFOR_CALL:
+            return `do ${yieldChk}local _pa=${regA};local _c=${decC};local _r={${rVar}[_pa](${rVar}[_pa+1],${rVar}[_pa+2])};` +
+                `for _i=1,_c do ${rVar}[_pa+2+_i]=_r[_i]end;local _ok=_r[1]~=nil;if _ok then ${rVar}[_pa+2]=_r[1]end;${rVar}[${decB}+${rbVar}]=_ok end`;
         case V5Op.OP_MBA_DECODE_0:
         case V5Op.OP_MBA_DECODE_1:
         case V5Op.OP_MBA_DECODE_2:
         case V5Op.OP_MBA_DECODE_3: {
             const cIdx = op - V5Op.OP_MBA_DECODE_0;
             const decFn = `${mbaDecVar}[${cIdx + 1}]`;
-            return `do local _mk=${vmSym.bx}(${uSym.ta}(_q,2654435761),${kSecVar});` +
-                `${sA}[_q]=${decFn}(${sA}[_q],_mk);` +
-                `${sB}[_q]=${decFn}(${sB}[_q],_mk);` +
-                `${sC}[_q]=${decFn}(${sC}[_q],_mk);` +
-                `${sOp}[_q]=${decFn}(${sD}[_q],_mk);` +
-                `${sD}[_q]=0;${pcVar}=_q end`;
+            const mkExpr = isFastMode
+                ? `${vmSym.bx}(${uSym.ta}(${qVar},2654435761),${k1Var})`
+                : `${vmSym.bx}(${stVar},${uSym.ta}(${qVar},2654435761))`;
+            return `do local _mk=${mkExpr};` +
+                `${sA}[${qVar}]=${decFn}(${sA}[${qVar}],_mk);` +
+                `${sB}[${qVar}]=${decFn}(${sB}[${qVar}],_mk);` +
+                `${sC}[${qVar}]=${decFn}(${sC}[${qVar}],_mk);` +
+                `${sOp}[${qVar}]=${decFn}(${sD}[${qVar}],_mk);` +
+                `${sD}[${qVar}]=0;${pcVar}=${qVar} end`;
         }
         default:
             return ``;
     }
 }
 
+function modeSlotsCompat(modeCfg, cArrVars) {
+    return cArrVars;
+}
+
 /**
- * Generates the entire Sentinel v5.1 APEX self-contained Luau payload.
+ * Generates the entire Sentinel v5.2 APEX self-contained Luau payload.
  * @param {object} container
  * @param {object} ctx
  * @param {object} [options] - supports placeId, targetPlaceId, robloxOnly, nativeFuncs
  * @param {() => number} rng
  */
-export function generateV5Lua(container, ctx, options = {}, rng) {
+export function generateV5Lua(container, ctx, options = {}, rng = Math.random) {
     const usedIds = new Set();
     const ident = (minLen = 2, maxLen = 4) => {
         const first = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_";
@@ -397,7 +574,15 @@ export function generateV5Lua(container, ctx, options = {}, rng) {
         const reserved = new Set([
             "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "if",
             "in", "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while",
-            "continue", "type", "export", "U", "A", "B", "C", "D", "_q", "_pc", "_kLo", "_z",
+            "continue", "type", "export", "U", "A", "B", "C", "D", "_z", "_vm", "_pr", "_nf", "_kLo",
+            "_k0", "_k1", "_k2", "_k3", "_pp", "_oc", "_col", "_pi", "_v", "_ln", "_rb2", "_d1", "_d2", "_d3", "_kk", "_kx", "_rk", "_1", "_2", "_3", "_4",
+            "_bx", "_ba", "_rs", "_mf", "_tu", "_tpack", "_tc", "_ty", "_sel", "_pc2", "_xpc2", "_nx", "_gm",
+            "_tclr", "_fp", "_fpn", "_sc", "_om0", "_om1", "_tw", "_ta", "_a1", "_a2", "_a3", "_a4",
+            "_vaArg", "_vacArg", "_va", "_vac", "_ep", "_ni", "_npa", "_mr", "_isVa", "_i", "_wi",
+            "_k", "_l", "_idx", "_mk", "_pa", "_bv", "_b", "_c", "_f", "_r", "_r1", "_r2", "_st", "_stp", "_ix", "_lm",
+            "_it", "_ity", "_ok", "_mt", "_bs", "_ul", "_ui", "_ud", "_bk", "_tg", "_oi", "_nU", "_np",
+            "_ac", "_ag", "_o", "_fc", "_d", "_eh", "_we", "_ws", "_g", "_t", "_x", "_y", "_acc", "_e",
+            "_q", "_n", "_uv", "_kv", "_or", "_ps", "_td", "_af", "_fl", "_tp", "_cp", "_tb", "_rf", "_tyf"
         ]);
         for (;;) {
             const len = minLen + Math.floor(rng() * (maxLen - minLen + 1));
@@ -408,6 +593,29 @@ export function generateV5Lua(container, ctx, options = {}, rng) {
                 return s;
             }
         }
+    };
+
+    // Allocate randomized identifiers for all VM internals (zero hardcoded _c0.._c4 / _R / _K / _E / _pc)
+    const vmNames = {
+        rVar: ident(2, 3),
+        kVar: ident(2, 3),
+        envVar: ident(2, 3),
+        pcVar: ident(2, 3),
+        topVar: ident(2, 3),
+        upVar: ident(2, 3),
+        poolVar: ident(2, 3),
+        openUvVar: ident(2, 3),
+        modeVar: ident(2, 3),
+        k1Var: ident(2, 3),
+        k2Var: ident(2, 3),
+        k3Var: ident(2, 3),
+        rbVar: ident(2, 3),
+        kbVar: ident(2, 3),
+        stVar: ident(2, 3),
+        mbaDecVar: ident(2, 3),
+        opVar: ident(2, 3),
+        qVar: ident(2, 3),
+        cArrVars: [ident(2, 3), ident(2, 3), ident(2, 3), ident(2, 3), ident(2, 3)],
     };
 
     // 1. Shuffled integer indices in `U` table for primitives + sharded trampoline stages
@@ -467,7 +675,7 @@ export function generateV5Lua(container, ctx, options = {}, rng) {
     const br8Poly = `(${hasBufExpr}and buffer.readu8)or function(b,i)return b[i+1]or 0 end`;
     const brf64Poly = `(${hasBufExpr}and buffer.readf64)or function(b,i)local b0,b1,b2,b3,b4,b5,b6,b7=${uSym.br8}(b,i),${uSym.br8}(b,i+1),${uSym.br8}(b,i+2),${uSym.br8}(b,i+3),${uSym.br8}(b,i+4),${uSym.br8}(b,i+5),${uSym.br8}(b,i+6),${uSym.br8}(b,i+7);local sg=(b7>=128)and -1 or 1;local b7m=b7%128;local ex=b7m*16+${uSym.mf}(b6/16);local mn=((((((b6%16)*256+b5)*256+b4)*256+b3)*256+b2)*256+b1)*256+b0;if ex==0 then if mn==0 then return sg==-1 and -0 or 0 end;return sg*${uSym.mld}(mn,-1074)elseif ex==2047 then return mn==0 and(sg*(1/0))or(0/0)end;return sg*${uSym.mld}(1+mn/4503599627370496,ex-1023)end`;
 
-    const taFn = `function(h,e)local c=${uSym.ba};h,e=c(h,4294967295),c(e,4294967295);local u,r,l,m,ll=c(h,65535),${uSym.rs},c(e,65535),${uSym.rs}(h,16),${uSym.rs}(e,16);return c(u*l+${uSym.ls}(c(u*ll+m*l,65535),16),4294967295)%4294967296 end`;
+    const taFn = `function(h,e)h,e=h%4294967296,e%4294967296;local u,l,m,ll=h%65536,e%65536,${uSym.mf}(h/65536),${uSym.mf}(e/65536);return(u*l+((u*ll+m*l)%65536)*65536)%4294967296 end`;
     const fnvFn = `function(s)local h=${fnvOffset};for i=1,#s do h=${uSym.ta}(${uSym.bx}(h,${uSym.sb}(s,i)),16777619)end;return h end`;
 
     const uEntries = [
@@ -501,36 +709,53 @@ export function generateV5Lua(container, ctx, options = {}, rng) {
         EXEC: uniqueStates[4],
     };
 
-    // Integrity derivation key & security traps
-    const initialSec = 0x2000 + Math.floor(rng() * 0x5FFF);
-    let expectedAcc = initialSec;
-    const wA = 0x13 + Math.floor(rng() * 120);
-    const wB = 0x29 + Math.floor(rng() * 120);
-    const wC = 0x41 + Math.floor(rng() * 120);
-    const wP1 = 0x17 + Math.floor(rng() * 120);
-    const wP2 = 0x35 + Math.floor(rng() * 120);
-    const wD = 0x5D + Math.floor(rng() * 120);
-    const poison1 = 0x101 + Math.floor(rng() * 0xFE00);
-    const poison2 = 0x101 + Math.floor(rng() * 0xFE00);
-    const mixStep = (acc, w) => (((acc * 31 + w) & 0xFFFF) ^ ((w * 7) & 0xFFFF)) & 0xFFFF;
-    expectedAcc = mixStep(expectedAcc, wA);
-    expectedAcc = mixStep(expectedAcc, wB);
-    expectedAcc = mixStep(expectedAcc, wC);
-    expectedAcc = mixStep(expectedAcc, 128); // IEEE-754 -0.0 sign-byte parity
-    expectedAcc = mixStep(expectedAcc, wP1);
-    expectedAcc = mixStep(expectedAcc, wP2);
+    // 128-bit (4x32-bit) ARX Integrity Derivation Sponge & Security Traps (Zero 16-bit mask)
+    const s0 = (0x20000000 + Math.floor(rng() * 0x5FFFFFFF)) >>> 0;
+    const s1 = (0x10000000 + Math.floor(rng() * 0x6FFFFFFF)) >>> 0;
+    const s2 = (0x30000000 + Math.floor(rng() * 0x4FFFFFFF)) >>> 0;
+    const s3 = (0x15000000 + Math.floor(rng() * 0x5FFFFFFF)) >>> 0;
+    const lanes = [s0, s1, s2, s3];
+    const rW = () => (0x110011 + Math.floor(rng() * 0x7FFFFE00)) >>> 0;
+    const wA0 = rW(), wA1 = rW();
+    const wB0 = rW(), wB1 = rW();
+    const wC0 = rW(), wC1 = rW();
+    const wBv0 = rW();
+    const wP10 = rW(), wP11 = rW();
+    const wP20 = rW(), wP21 = rW();
+    const wD0 = rW(), wD1 = rW();
+    const poison1 = rW();
+    const poison2 = rW();
+
+    arxMix32(lanes, wA0, wA1);
+    arxMix32(lanes, wB0, wB1);
+    arxMix32(lanes, wC0, wC1);
+    arxMix32(lanes, wBv0, 128); // IEEE-754 -0.0 sign-byte parity
+    arxMix32(lanes, wP10, wP11);
+    arxMix32(lanes, wP20, wP21);
 
     const targetPlaceId = Number(options.placeId || options.targetPlaceId || 0);
     const hasPlaceLock = targetPlaceId > 0;
-    const robloxOnly = Boolean(options.robloxOnly);
-    const shareA = 0x1100 + Math.floor(rng() * 0x7E00);
-    const shareB = ((0x1000 + Math.floor(rng() * 0xDE00)) ^ shareA) & 0xFFFF;
-    const dynSalt = hasPlaceLock ? (targetPlaceId & 0xFFFF) : ((shareA ^ shareB) & 0xFFFF);
-    expectedAcc = mixStep(expectedAcc, dynSalt);
-    expectedAcc = mixStep(expectedAcc, wD);
+    const robloxOnly = Boolean(options.robloxOnly || options.strictRoblox);
+    const shareA = (0x10000000 + Math.floor(rng() * 0x70000000)) >>> 0;
+    const shareB = ((0x20000000 + Math.floor(rng() * 0x60000000)) ^ shareA) >>> 0;
+    const dynSalt = hasPlaceLock ? (targetPlaceId >>> 0) : ((shareA ^ shareB) >>> 0);
+    arxMix32(lanes, dynSalt, (dynSalt ^ 2654435761) >>> 0);
 
-    // Non-zero target derivation key: K_sec = bxor(acc, K_MASK) == K_TARGET != 0
-    const K_MASK = (expectedAcc ^ ctx.K_TARGET) & 0xFFFF;
+    const hInst = saltedFnv1a32("Instance", fnvOffset);
+    const hDm = saltedFnv1a32("DataModel", fnvOffset);
+    const hWs = saltedFnv1a32("Workspace", fnvOffset);
+    const hEn = saltedFnv1a32("Enums", fnvOffset);
+    const hVec = saltedFnv1a32("vector", fnvOffset);
+    const rfExpected = (((((hInst ^ hDm) >>> 0) + ((hWs ^ hEn) >>> 0)) >>> 0) ^ ((hVec + 16777472) >>> 0)) >>> 0;
+    if (robloxOnly) {
+        arxMix32(lanes, rfExpected, (rfExpected ^ 2246822519) >>> 0);
+    }
+    arxMix32(lanes, wD0, wD1);
+
+    const M0 = (lanes[0] ^ ctx.K0) >>> 0;
+    const M1 = (lanes[1] ^ ctx.K1) >>> 0;
+    const M2 = (lanes[2] ^ ctx.K2) >>> 0;
+    const M3 = (lanes[3] ^ ctx.K3) >>> 0;
 
     const spyNames = [
         "SimpleSpy", "Hydroxide", "RemoteSpy", "TurtleSpy", "OriginalNamecall",
@@ -553,32 +778,50 @@ export function generateV5Lua(container, ctx, options = {}, rng) {
     const methParse = ident(2, 3);
     const methEnv = ident(2, 3);
 
-    // Security Gate Method `U[methSec]`
+    // Security Gate Method `U[methSec]` -> returns 4x32-bit key vector (K0, K1, K2, K3)
     uEntries.push(`[${JSON.stringify(methSec)}]=function(U)` +
-        `local _a=${initialSec};` +
-        `if ${emitOpaquePredicate(rng, uSym, true)} then local _m=${uSym.ba}(_a*31+${wA},65535);_a=${uSym.ba}(${uSym.bx}(_m,${(wA * 7) & 0xFFFF}),65535) end;` +
-        `if ${uSym.pc}(function() local _t=${uSym.sm}({},{[${uSym.sc}(95,95,105,110,100,101,120)]=function() return 79 end});if _t[1]~=79 then ${uSym.er}(1) end end) then local _m=${uSym.ba}(_a*31+${wB},65535);_a=${uSym.ba}(${uSym.bx}(_m,${(wB * 7) & 0xFFFF}),65535) end;` +
+        `local _a,_b,_c,_d=${s0},${s1},${s2},${s3};` +
+        `local function _mx(w0,w1)` +
+            `_a=${uSym.bx}(${uSym.ta}((_a+w0)%4294967296,2654435761),${uSym.lr}(_b,7));` +
+            `_b=(${uSym.ta}(${uSym.bx}(_b,w1),2246822519)+${uSym.lr}(_c,13))%4294967296;` +
+            `_c=${uSym.bx}(${uSym.ta}((_c+${uSym.bx}(_a,_d))%4294967296,3266489917),${uSym.lr}(_d,17));` +
+            `_d=(${uSym.ta}(${uSym.bx}(_d,_a),668265263)+${uSym.lr}(_b,11))%4294967296 end;` +
+        `if ${emitOpaquePredicate(rng, uSym, true)} then _mx(${wA0},${wA1}) end;` +
+        `if ${uSym.pc}(function() local _t=${uSym.sm}({},{[${uSym.sc}(95,95,105,110,100,101,120)]=function() return 79 end});if _t[1]~=79 then ${uSym.er}(1) end end) then _mx(${wB0},${wB1}) end;` +
         `local _ok=${uSym.pc}(function() if debug and debug.info then local _d=function() end;local _s1,_src=${uSym.pc}(debug.info,_d,"s");if _s1 and _src=="[C]" then ${uSym.er}(1) end;local _s2,_fn=${uSym.pc}(debug.info,_d,"f");if _s2 and _fn~=_d then ${uSym.er}(1) end end end);` +
-        `if _ok then local _m=${uSym.ba}(_a*31+${wC},65535);_a=${uSym.ba}(${uSym.bx}(_m,${(wC * 7) & 0xFFFF}),65535) end;` +
+        `if _ok then _mx(${wC0},${wC1}) end;` +
         // IEEE-754 -0.0 buffer derivation + zero-wipe (exact parity 128 on pure-Lua fallback)
         `local _bv=0;` +
         `if ${uSym.ty}(buffer)=="table"and buffer.create and buffer.writef64 and buffer.readu32 and buffer.fill then ` +
             `local _bf=buffer.create(24);buffer.writef64(_bf,16,0/-28);_bv=${uSym.rs}(buffer.readu32(_bf,20),24);buffer.fill(_bf,0,0,24)` +
         `else _bv=((1/(0/-28))==-math.huge)and 128 or 0 end;` +
-        `local _mbv=${uSym.ba}(_a*31+_bv,65535);_a=${uSym.ba}(${uSym.bx}(_mbv,${uSym.ba}(_bv*7,65535)),65535);` +
+        `_mx(${wBv0},_bv);` +
         // Exception-path side-channel traps
         `local _ok1=${uSym.pc}(function() local _x=0;local _=_x[nil];_a=${uSym.bx}(_a,${poison1}) end);` +
-        `if not _ok1 then local _m=${uSym.ba}(_a*31+${wP1},65535);_a=${uSym.ba}(${uSym.bx}(_m,${(wP1 * 7) & 0xFFFF}),65535) end;` +
+        `if not _ok1 then _mx(${wP10},${wP11}) end;` +
         `local _ok2=false;` +
-        `if ${uSym.ty}(table)=="table"and table.freeze then _ok2=${uSym.pc}(function() local _ft=table.freeze({});_ft[1]=1;_a=${uSym.bx}(_a,${poison2}) end) end;` +
-        `if not _ok2 then local _m=${uSym.ba}(_a*31+${wP2},65535);_a=${uSym.ba}(${uSym.bx}(_m,${(wP2 * 7) & 0xFFFF}),65535) end;` +
-        // PlaceId / DataModel check
+        `if ${uSym.ty}(table)=="table"and table.freeze then _ok2=${uSym.pc}(function() local _ft=table.freeze({});_ft[1]=1;_b=${uSym.bx}(_b,${poison2}) end) end;` +
+        `if not _ok2 then _mx(${wP20},${wP21}) end;` +
+        // PlaceId / DataModel / Strict Roblox C-Engine Fingerprint check (full 32-bit mix, zero 65535 truncation)
         `local _ds=0;` +
         (hasPlaceLock
-            ? `${uSym.pc}(function() local _g=(${uSym.ty}(game)=="userdata" and game) or (type(${uSym.gg})=="function" and ${uSym.gg}().game);if _g and ${uSym.ty}(_g)=="userdata" and _g.PlaceId then _ds=${uSym.ba}(_g.PlaceId,65535) end end);`
+            ? `${uSym.pc}(function() local _g=(${uSym.ty}(game)=="userdata" and game) or (type(${uSym.gg})=="function" and ${uSym.gg}().game);if _g and ${uSym.ty}(_g)=="userdata" and _g.PlaceId then _ds=${uSym.ba}(_g.PlaceId,4294967295) end end);`
             : `${uSym.pc}(function() if game~=nil then local _tg=${uSym.ty}(game);if _tg=="userdata" then if game.ClassName=="DataModel" then _ds=${uSym.bx}(${shareA},${shareB}) end elseif _tg=="table" then _ds=${robloxOnly ? "0" : `${uSym.bx}(${shareA},${shareB})`} end else ${robloxOnly ? "_ds=0" : `_ds=${uSym.bx}(${shareA},${shareB})`} end end);`
         ) +
-        `local _md=${uSym.ba}(_a*31+_ds,65535);_a=${uSym.ba}(${uSym.bx}(_md,${uSym.ba}((_ds*7),65535)),65535);` +
+        `_mx(_ds,${uSym.bx}(_ds,2654435761));` +
+        (robloxOnly
+            ? `local _rf=0;${uSym.pc}(function() ` +
+                `local _tyf=typeof;` +
+                `if ${uSym.ty}(_tyf)~="function" or (debug and debug.info and debug.info(_tyf,"s")~="[C]") then return end;` +
+                `if game==nil or workspace==nil or Enum==nil or Vector3==nil or Vector3.zero==nil then return end;` +
+                `local _i0=${uSym.fnv}(_tyf(game));local _i1=${uSym.fnv}(game.ClassName);` +
+                `local _i2=${uSym.fnv}(workspace.ClassName);local _i3=${uSym.fnv}(_tyf(Enum));` +
+                `local _i4=${uSym.fnv}(_tyf(Vector3.zero));local _pv=Enum.Material.Plastic.Value;` +
+                `if _i0==${hInst} and _pv==256 and (not debug or not debug.info or debug.info(game.GetService,"s")=="[C]") then ` +
+                `_rf=${uSym.bx}(((${uSym.bx}(_i0,_i1)+${uSym.bx}(_i2,_i3))%4294967296),((_i4+_pv*65537)%4294967296)) end ` +
+              `end);_mx(_rf,${uSym.bx}(_rf,2246822519));`
+            : ``
+        ) +
         // Anti-Spy + C-Closure Integrity Check
         `local _sp=${spyMapLit};local _tr=false;` +
         `${uSym.pc}(function() ` +
@@ -597,8 +840,8 @@ export function generateV5Lua(container, ctx, options = {}, rng) {
                 `for _ei=1,#_envs do local _g=_envs[_ei];if ${uSym.ty}(_g)=="table" then for _k,_v in ${uSym.nx},_g do if _v and ${uSym.ty}(_k)=="string" and _sp[${uSym.fnv}(_k)] then _tr=true;break end end end;if _tr then break end end ` +
             `end ` +
         `end);` +
-        `if not _tr then local _mw=${uSym.ba}(_a*31+${wD},65535);_a=${uSym.ba}(${uSym.bx}(_mw,${(wD * 7) & 0xFFFF}),65535) end;` +
-        `return ${uSym.bx}(_a,${K_MASK}) end`
+        `if not _tr then _mx(${wD0},${wD1}) end;` +
+        `return ${uSym.bx}(_a,${M0}),${uSym.bx}(_b,${M1}),${uSym.bx}(_c,${M2}),${uSym.bx}(_d,${M3}) end`
     );
 
     // Zero-plaintext Hashed Environment Bridge builder method (exposes __PBZ_NF__ & __PBZ_CRASH__)
@@ -646,8 +889,8 @@ export function generateV5Lua(container, ctx, options = {}, rng) {
     // 4. Sharded Function-Table Trampoline Bootstrap Stages
     const { TAG_NIL, TAG_FALSE, TAG_TRUE, TAG_NUM, TAG_STR } = container.tags;
 
-    // Stage 1: ASSEMBLE_B85 -> (ST.RC4_DEC, _ks, _cb, _clen, nil)
-    uEntries.push(`[${P.shB85}]=function(U,_ks,_a,_b,_c)` +
+    // Stage 1: ASSEMBLE_B85 -> (ST.RC4_DEC, _kv, _cb, _clen, nil)
+    uEntries.push(`[${P.shB85}]=function(U,_kv,_a,_b,_c)` +
         `local _ch=${chunksExpr};local _al=${luaByteString(container.alphabet)};local _dp=${dictPairsExpr};` +
         `local _s=${uSym.tcon}(_ch);` +
         `for _i=1,#_dp do _s=${uSym.sg}(_s,_dp[_i][1],_dp[_i][2]) end;` +
@@ -659,79 +902,95 @@ export function generateV5Lua(container, ctx, options = {}, rng) {
         `if _wp<_clen then ${uSym.bw8}(_cb,_wp,${uSym.ba}(${uSym.mf}(_v/65536),255));_wp=_wp+1 end;` +
         `if _wp<_clen then ${uSym.bw8}(_cb,_wp,${uSym.ba}(${uSym.mf}(_v/256),255));_wp=_wp+1 end;` +
         `if _wp<_clen then ${uSym.bw8}(_cb,_wp,${uSym.ba}(_v,255));_wp=_wp+1 end end;` +
-        `return ${ST.RC4_DEC},_ks,_cb,_clen,nil end`
+        `return ${ST.RC4_DEC},_kv,_cb,_clen,nil end`
     );
 
-    // Stage 2: RC4_DEC -> (ST.LZSS_DEC, _ks, _pb, _clen, nil)
-    uEntries.push(`[${P.shRc4}]=function(U,_ks,_cb,_cl,_c)` +
-        `local _rk=${rc4KeyExpr};` +
-        `local _kLo=${uSym.ba}(_ks,255);local _kHi=${uSym.ba}(${uSym.rs}(_ks,8),255);` +
+    // Stage 2: RC4_DEC (128-bit KSA + Drop-N + Rolling ARX Keystream) -> (ST.LZSS_DEC, _kv, _pb, _clen, nil)
+    uEntries.push(`[${P.shRc4}]=function(U,_kv,_cb,_cl,_c)` +
+        `local _rk=${rc4KeyExpr};local _k0,_k1,_k2,_k3=_kv[1],_kv[2],_kv[3],_kv[4];` +
+        `local _kb={` +
+            `${uSym.ba}(_k0,255),${uSym.ba}(${uSym.rs}(_k0,8),255),${uSym.ba}(${uSym.rs}(_k0,16),255),${uSym.ba}(${uSym.rs}(_k0,24),255),` +
+            `${uSym.ba}(_k1,255),${uSym.ba}(${uSym.rs}(_k1,8),255),${uSym.ba}(${uSym.rs}(_k1,16),255),${uSym.ba}(${uSym.rs}(_k1,24),255),` +
+            `${uSym.ba}(_k2,255),${uSym.ba}(${uSym.rs}(_k2,8),255),${uSym.ba}(${uSym.rs}(_k2,16),255),${uSym.ba}(${uSym.rs}(_k2,24),255),` +
+            `${uSym.ba}(_k3,255),${uSym.ba}(${uSym.rs}(_k3,8),255),${uSym.ba}(${uSym.rs}(_k3,16),255),${uSym.ba}(${uSym.rs}(_k3,24),255)` +
+        `};` +
         `local _S={};for _i=0,255 do _S[_i]=_i end;` +
-        `local _kl=#_rk;local _j=0;for _i=0,255 do local _kv=${uSym.bx}(_rk[(_i%_kl)+1],((_i%2==1)and _kHi or _kLo));_j=(_j+_S[_i]+_kv)%256;_S[_i],_S[_j]=_S[_j],_S[_i] end;` +
-        `local _pb=${uSym.bcr}(_cl);local _a,_b=0,0;` +
-        `for _k=0,_cl-1 do _a=(_a+1)%256;_b=(_b+_S[_a])%256;_S[_a],_S[_b]=_S[_b],_S[_a];${uSym.bw8}(_pb,_k,${uSym.bx}(${uSym.br8}(_cb,_k),_S[(_S[_a]+_S[_b])%256])) end;` +
-        `return ${ST.LZSS_DEC},_ks,_pb,_cl,nil end`
+        `local _kl=#_rk;local _j=0;for _i=0,255 do local _mi=_i%_kl;local _kk=${uSym.bx}(_rk[_mi+1],_kb[(_mi%16)+1]);_j=(_j+_S[_i]+_kk)%256;_S[_i],_S[_j]=_S[_j],_S[_i] end;` +
+        `local _a,_b=0,0;for _di=1,${container.rc4DropN} do _a=(_a+1)%256;_b=(_b+_S[_a])%256;_S[_a],_S[_b]=_S[_b],_S[_a] end;` +
+        `local _pb=${uSym.bcr}(_cl);local _ax=${uSym.bx}(_k1,_k2);` +
+        `for _k=0,_cl-1 do _a=(_a+1)%256;_b=(_b+_S[_a])%256;_S[_a],_S[_b]=_S[_b],_S[_a];` +
+        `_ax=(${uSym.ta}(_ax,1664525)+1013904223)%4294967296;` +
+        `local _ks=${uSym.bx}(_S[(_S[_a]+_S[_b])%256],${uSym.ba}(${uSym.rs}(_ax,16),255));` +
+        `${uSym.bw8}(_pb,_k,${uSym.bx}(${uSym.br8}(_cb,_k),_ks)) end;` +
+        `return ${ST.LZSS_DEC},_kv,_pb,_cl,nil end`
     );
 
-    // Stage 3: LZSS_DEC -> (ST.PARSE_PROTOS, _ks, _raw, _rawLen, nil)
-    uEntries.push(`[${P.shLzss}]=function(U,_ks,_pb,_cl,_c)` +
-        `local _flg=${uSym.br8}(_pb,0);` +
-        `local _rawLen=${uSym.br8}(_pb,1)+${uSym.br8}(_pb,2)*256+${uSym.br8}(_pb,3)*65536+${uSym.br8}(_pb,4)*16777216;` +
-        `if _rawLen<0 or _rawLen>67108864 then ${uSym.er}("") end;` +
+    // Stage 3: LZSS_DEC (Zero-Oracle 9-Byte Encrypted Header + 32-bit FNV MAC) -> (ST.PARSE_PROTOS, _kv, _raw, _rawLen, nil)
+    uEntries.push(`[${P.shLzss}]=function(U,_kv,_pb,_cl,_c)` +
+        `local _flg=${uSym.bx}(${uSym.br8}(_pb,0),${uSym.ba}(_kv[3],255));` +
+        `local _rawLen=${uSym.bx}(${uSym.br8}(_pb,1)+${uSym.br8}(_pb,2)*256+${uSym.br8}(_pb,3)*65536+${uSym.br8}(_pb,4)*16777216,_kv[4]);` +
+        `local _expMac=${uSym.bx}(${uSym.br8}(_pb,5)+${uSym.br8}(_pb,6)*256+${uSym.br8}(_pb,7)*65536+${uSym.br8}(_pb,8)*16777216,_kv[1]);` +
+        `local _bad=(_flg~=${container.flagRaw} and _flg~=${container.flagComp})or _rawLen<1 or _rawLen>67108864;` +
+        `if _bad then _rawLen=1;_kv[1]=${uSym.bx}(_kv[1],324508639) end;` +
         `local _raw=${uSym.bcr}(_rawLen);` +
-        `if _flg==0 then for _i=0,_rawLen-1 do ${uSym.bw8}(_raw,_i,${uSym.br8}(_pb,5+_i)) end ` +
-        `else local _p=5;local _op=0;while _p<_cl do local _ct=${uSym.br8}(_pb,_p);_p=_p+1;` +
-        `if _ct<128 then local _n=_ct+1;for _j=1,_n do ${uSym.bw8}(_raw,_op,${uSym.br8}(_pb,_p));_op=_op+1;_p=_p+1 end;` +
-        `elseif _ct<192 then local _ll=_ct-124;local _lo=${uSym.br8}(_pb,_p)+1;_p=_p+1;for _j=1,_ll do ${uSym.bw8}(_raw,_op,${uSym.br8}(_raw,_op-_lo));_op=_op+1 end;` +
-        `else local _ll=_ct-188;local _lo=${uSym.br8}(_pb,_p)*256+${uSym.br8}(_pb,_p+1);_p=_p+2;for _j=1,_ll do ${uSym.bw8}(_raw,_op,${uSym.br8}(_raw,_op-_lo));_op=_op+1 end end end end;` +
-        `return ${ST.PARSE_PROTOS},_ks,_raw,_rawLen,nil end`
+        `if not _bad then ` +
+            `if _flg==${container.flagRaw} then for _i=0,_rawLen-1 do ${uSym.bw8}(_raw,_i,${uSym.br8}(_pb,9+_i)) end ` +
+            `else local _p=9;local _op=0;while _p<_cl and _op<_rawLen do local _ct=${uSym.br8}(_pb,_p);_p=_p+1;` +
+            `if _ct<128 then local _n=_ct+1;for _j=1,_n do if _op<_rawLen then ${uSym.bw8}(_raw,_op,${uSym.br8}(_pb,_p));_op=_op+1 end;_p=_p+1 end;` +
+            `elseif _ct<192 then local _ll=_ct-124;local _lo=${uSym.br8}(_pb,_p)+1;_p=_p+1;for _j=1,_ll do if _op<_rawLen then ${uSym.bw8}(_raw,_op,${uSym.br8}(_raw,_op-_lo));_op=_op+1 end end;` +
+            `else local _ll=_ct-188;local _lo=${uSym.br8}(_pb,_p)*256+${uSym.br8}(_pb,_p+1);_p=_p+2;for _j=1,_ll do if _op<_rawLen then ${uSym.bw8}(_raw,_op,${uSym.br8}(_raw,_op-_lo));_op=_op+1 end end end end end;` +
+            `local _mc=${uSym.bx}(_kv[1],_kv[2]);for _mi=0,_rawLen-1 do _mc=${uSym.ta}(${uSym.bx}(_mc,${uSym.br8}(_raw,_mi)),16777619) end;` +
+            `if _mc~=_expMac then _kv[2]=${uSym.bx}(_kv[2],1515870810);_kv[3]=${uSym.bx}(_kv[3],2779096485) end ` +
+        `end;` +
+        `return ${ST.PARSE_PROTOS},_kv,_raw,_rawLen,nil end`
     );
 
-    // Stage 4: PARSE_PROTOS -> (ST.EXEC, _pool, _ridx, _decStr, nil)
-    uEntries.push(`[${P.shParse}]=function(U,_ks,_raw,_rl,_c)` +
+    // Stage 4: PARSE_PROTOS (128-bit StrPool + _rb/_kb Shifted Consts + AoS Rolling-LCG Stream) -> (ST.EXEC, _pool, _ridx, _decStr, nil)
+    uEntries.push(`[${P.shParse}]=function(U,_kv,_raw,_rl,_c)` +
         `local _isb=${invSboxExpr};` +
-        `local _kLo=${uSym.ba}(_ks,255);local _kHi=${uSym.ba}(${uSym.rs}(_ks,8),255);` +
+        `local _k0,_k1,_k2,_k3=_kv[1],_kv[2],_kv[3],_kv[4];` +
+        `local _kb8={${uSym.ba}(_k2,255),${uSym.ba}(${uSym.rs}(_k2,8),255),${uSym.ba}(${uSym.rs}(_k2,16),255),${uSym.ba}(${uSym.rs}(_k2,24),255),${uSym.ba}(_k3,255),${uSym.ba}(${uSym.rs}(_k3,8),255),${uSym.ba}(${uSym.rs}(_k3,16),255),${uSym.ba}(${uSym.rs}(_k3,24),255)};` +
+        `local _k2m=${uSym.ba}(_k2,65535);local _k3m=${uSym.ba}(_k3,65535);` +
         `local _pos=0;` +
         `local function _ru() local _v,_m=0,1;while true do local _b=${uSym.br8}(_raw,_pos);_pos=_pos+1;_v=_v+${uSym.ba}(_b,127)*_m;if _b<128 then return _v end;_m=_m*128 end end;` +
         `local _plen=_ru();local _sbuf=${uSym.bcr}(_plen);for _i=0,_plen-1 do ${uSym.bw8}(_sbuf,_i,${uSym.br8}(_raw,_pos+_i)) end;_pos=_pos+_plen;` +
         `local _scache={};` +
         `local function _decStr(_off,_ln,_sl)` +
         `local _ck=_off*65537+_ln;local _cv=_scache[_ck];if _cv~=nil then return _cv end;` +
-        `local _l=${uSym.bx}(_sl,_ks);local _t={};` +
+        `local _l=${uSym.bx}(_sl,_k1);local _t={};` +
         `for _i=0,_ln-1 do _l=(${uSym.ta}(_l,1664525)+1013904223)%4294967296;` +
-        `local _kb=${uSym.bx}(${uSym.rs}(_l,16),((_i%2==1)and _kHi or _kLo));_kb=${uSym.ba}(_kb,255);` +
-        `local _sv=${uSym.bx}(${uSym.br8}(_sbuf,_off+_i),_kb);` +
+        `local _kby=${uSym.bx}(${uSym.ba}(${uSym.rs}(_l,16),255),_kb8[(_i%8)+1]);` +
+        `local _sv=${uSym.bx}(${uSym.br8}(_sbuf,_off+_i),_kby);` +
         `_t[_i+1]=${uSym.sc}(_isb[_sv+1]) end;` +
         `local _str=${uSym.tcon}(_t);_scache[_ck]=_str;return _str end;` +
         `local _np=_ru();local _ridx=_ru()+1;local _pool={};` +
+        `local _wo={${container.wireColOrder.map(x => x + 1).join(",")}};` +
         `for _pi=1,_np do ` +
         `local _npa=_ru();local _mr=_ru();local _fl=${uSym.br8}(_raw,_pos);_pos=_pos+1;` +
+        `local _rb=${uSym.bx}(_ru(),_k3m);local _kb=${uSym.bx}(_ru(),_k2m);local _ps=${uSym.bx}(_ru(),_k3);` +
         `local _nk=_ru();local _K={};local _ksd={};` +
-        `for _ki=1,_nk do local _tg=${uSym.br8}(_raw,_pos);_pos=_pos+1;` +
-        `if _tg==${TAG_NIL} then _K[_ki]=nil ` +
-        `elseif _tg==${TAG_FALSE} then _K[_ki]=false ` +
-        `elseif _tg==${TAG_TRUE} then _K[_ki]=true ` +
-        `elseif _tg==${TAG_NUM} then _K[_ki]=${uSym.brf64}(_raw,_pos);_pos=_pos+8 ` +
-        `elseif _tg==${TAG_STR} then _ksd[_ki]={_ru(),_ru(),_ru()} end end;` +
+        `for _ki=1,_nk do local _tg=${uSym.br8}(_raw,_pos);_pos=_pos+1;local _ks=_ki+_kb-1;` +
+        `if _tg==${TAG_NIL} then _K[_ks]=nil ` +
+        `elseif _tg==${TAG_FALSE} then _K[_ks]=false ` +
+        `elseif _tg==${TAG_TRUE} then _K[_ks]=true ` +
+        `elseif _tg==${TAG_NUM} then _K[_ks]=${uSym.brf64}(_raw,_pos);_pos=_pos+8 ` +
+        `elseif _tg==${TAG_STR} then _ksd[_ks]={_ru(),_ru(),_ru()} end end;` +
         `local _kmt={};_kmt[${uSym.sc}(95,95,105,110,100,101,120)]=function(t,i) local _sd=_ksd[i];if _sd then local _s=_decStr(_sd[1],_sd[2],_sd[3]);_ksd[i]=nil;${uSym.rset}(t,i,_s);return _s end;return nil end;` +
         `_kmt[${uSym.sc}(95,95,110,101,119,105,110,100,101,120)]=function() end;_kmt[${uSym.sc}(95,95,109,101,116,97,116,97,98,108,101)]=false;` +
         `${uSym.sm}(_K,_kmt);` +
         `local _nuv=_ru();local _uvs={};for _ui=1,_nuv do local _il=${uSym.br8}(_raw,_pos);_pos=_pos+1;_uvs[_ui]={_il,_ru()} end;` +
         `local _nc=_ru();local _chp={};for _ci=1,_nc do _chp[_ci]=_ru()+1 end;` +
-        `local _ni=_ru();local _a0,_a1,_a2,_a3,_a4={},{},{},{},{};` +
-        `for _j=1,_ni do _a0[_j]=_ru() end;` +
-        `for _j=1,_ni do _a1[_j]=_ru() end;` +
-        `for _j=1,_ni do _a2[_j]=_ru() end;` +
-        `for _j=1,_ni do _a3[_j]=_ru() end;` +
-        `for _j=1,_ni do _a4[_j]=_ru() end;` +
-        `_pool[_pi]={_K,_npa,_mr,(_fl%2==1),(${uSym.ba}(_fl,2)~=0 and 1 or 0),_uvs,_chp,_ni,_a0,_a1,_a2,_a3,_a4,(${uSym.ba}(_fl,4)~=0),(${uSym.ba}(_fl,8)~=0),(${uSym.ba}(_fl,16)~=0)}` +
+        `local _ni=_ru();local _a0,_a1,_a2,_a3,_a4={},{},{},{},{};local _as={_a0,_a1,_a2,_a3,_a4};` +
+        `local _plcg=${uSym.bx}(_k1,${uSym.ta}(_pi,2654435761));` +
+        `for _j=1,_ni do for _wi=1,5 do _plcg=(${uSym.ta}(_plcg,1664525)+1013904223)%4294967296;_as[_wo[_wi]][_j]=${uSym.bx}(_ru(),_plcg) end end;` +
+        `_pool[_pi]={_K,_npa,_mr,(_fl%2==1),(${uSym.ba}(_fl,2)~=0 and 1 or 0),_uvs,_chp,_ni,_a0,_a1,_a2,_a3,_a4,(${uSym.ba}(_fl,4)~=0),(${uSym.ba}(_fl,8)~=0),(${uSym.ba}(_fl,16)~=0),_rb,_kb,_ps}` +
         `end;return ${ST.EXEC},_pool,_ridx,_decStr,nil end`
     );
 
     // Trampoline Driver `U[methParse]`
-    uEntries.push(`[${JSON.stringify(methParse)}]=function(U,_ks)` +
+    uEntries.push(`[${JSON.stringify(methParse)}]=function(U,_k0,_k1,_k2,_k3)` +
         `local _tp={[${ST.ASSEMBLE_B85}]=${P.shB85},[${ST.RC4_DEC}]=${P.shRc4},[${ST.LZSS_DEC}]=${P.shLzss},[${ST.PARSE_PROTOS}]=${P.shParse}};` +
-        `local _st=${ST.ASSEMBLE_B85};local _s1,_s2,_s3,_s4=_ks,nil,nil,nil;` +
+        `local _st=${ST.ASSEMBLE_B85};local _s1,_s2,_s3,_s4={_k0,_k1,_k2,_k3},nil,nil,nil;` +
         `while _st~=${ST.EXEC} do _st,_s1,_s2,_s3,_s4=U[_tp[_st]](U,_s1,_s2,_s3,_s4) end;` +
         `return _s1,_s2,_s3 end`
     );
@@ -762,21 +1021,14 @@ export function generateV5Lua(container, ctx, options = {}, rng) {
         );
     }
 
-    // 5. Build FASTCALL-Hoisted Interpreter `U[P.run]` with Anti-vmmap Dual-Mode BST & Register Frame Pool
-    const rVar = "_R";
-    const kVar = "_K";
-    const envVar = "_E";
-    const pcVar = "_pc";
-    const topVar = "_tp";
-    const upVar = "_U";
-    const poolVar = "_P";
-    const openUvVar = "_O";
-    const modeVar = "_md";
-    const kSecVar = "_ks";
-    const mbaDecVar = "_mb";
-    const opVar = "_op";
+    // 5. Build FASTCALL-Hoisted Interpreter `U[P.run]` with Anti-vmmap Dual-Mode BST, Rolling-State Block Cipher & Merged/Split ISA
+    const {
+        rVar, kVar, envVar, pcVar, topVar, upVar, poolVar, openUvVar,
+        modeVar, k1Var, k2Var, k3Var, rbVar, kbVar, stVar, mbaDecVar, opVar, qVar,
+        cArrVars,
+    } = vmNames;
+    const kSecVar = "_k0";
     const twVar = "_tw";
-    const cArrVars = ["_c0", "_c1", "_c2", "_c3", "_c4"];
 
     const vmSym = {
         ...uSym,
@@ -785,7 +1037,7 @@ export function generateV5Lua(container, ctx, options = {}, rng) {
         sel: "_sel", pc: "_pc2", xpc: "_xpc2", nx: "_nx", gm: "_gm",
     };
 
-    const mbaInitExpr = `{${ctx.mbaCodecs.map(c => c.emitLuaDecoderFn(vmSym)).join(",")}}`;
+    const mbaInitExpr = `{${ctx.mbaCodecs.map(c => c.emitLuaDecoderFn({ ...vmSym, bo: uSym.bo, bn: uSym.bn, lr: uSym.lr, ta: uSym.ta })).join(",")}}`;
 
     const isFastMode = Boolean(ctx.isFastMode || ctx.level === "fast");
 
@@ -796,8 +1048,8 @@ export function generateV5Lua(container, ctx, options = {}, rng) {
             if (!usedSet.has(op)) continue;
             const body = buildOpcodeHandlerBody(op, modeCfg, {
                 uSym, vmSym, rVar, kVar, envVar, pcVar, topVar, upVar, poolVar, openUvVar,
-                modeVar, kSecVar, modeSlots: [cArrVars, cArrVars],
-                mbaDecVar, modes: ctx.modes, twVar, kLo: ctx.kLo, isFastMode,
+                modeVar, k1Var, k2Var, rbVar, kbVar, stVar, mbaDecVar, isFastMode,
+                rkOffset: ctx.rkOffset, qVar, cArrVars, kLo: ctx.kLo, mergeTags: ctx.mergeTags, rng,
             });
             entries.push({ id: modeCfg.opEncode[op], body });
         }
@@ -805,8 +1057,10 @@ export function generateV5Lua(container, ctx, options = {}, rng) {
         return buildAntiVmmapBST(entries, opVar, rng, vmSym, ctx.level);
     };
 
-    const wipeEpEnd = isFastMode ? `` : `if _ep then for _wi=1,_ni do _c0[_wi]=nil;_c1[_wi]=nil;_c2[_wi]=nil;_c3[_wi]=nil;_c4[_wi]=nil end end;`;
-    const recFrameEnd = `if not _O and _fpn<64 then _tclr(${rVar});_fpn=_fpn+1;_fp[_fpn]=${rVar} end;`;
+    const wipeEpEnd = isFastMode
+        ? ``
+        : `if _ep then for _wi=1,_ni do ${cArrVars[0]}[_wi]=nil;${cArrVars[1]}[_wi]=nil;${cArrVars[2]}[_wi]=nil;${cArrVars[3]}[_wi]=nil;${cArrVars[4]}[_wi]=nil end end;`;
+    const recFrameEnd = `if not ${openUvVar} and _fpn<64 then _tclr(${rVar});_fpn=_fpn+1;_fp[_fpn]=${rVar} end;`;
 
     let dispatchLoopCode;
     let omInitLine;
@@ -820,12 +1074,12 @@ export function generateV5Lua(container, ctx, options = {}, rng) {
         omInitLine = `local _om0,_om1=_bx(_kLo,${m0.mSalt}),_bx(_kLo,${m1.mSalt});`;
         dispatchLoopCode =
             `while ${pcVar}<=_ni do ` +
-            `local _q=${pcVar};${pcVar}=${pcVar}+1;` +
+            `local ${qVar}=${pcVar};${pcVar}=${pcVar}+1;` +
             `if ${modeVar}==0 then ` +
-            `local ${opVar}=_bx(${opCol0}[_q],_om0);` +
+            `local ${opVar}=_bx(${opCol0}[${qVar}],_om0);` +
             `${bst0} ` +
             `else ` +
-            `local ${opVar}=_bx(${opCol1}[_q],_om1);` +
+            `local ${opVar}=_bx(${opCol1}[${qVar}],_om1);` +
             `${bst1} end end;` +
             `${wipeEpEnd}${recFrameEnd}`;
     } else {
@@ -836,19 +1090,21 @@ export function generateV5Lua(container, ctx, options = {}, rng) {
         if (isFastMode) {
             dispatchLoopCode =
                 `while ${pcVar}<=_ni do ` +
-                `local _q=${pcVar};${pcVar}=${pcVar}+1;` +
-                `local ${opVar}=${opCol0}[_q];` +
+                `local ${qVar}=${pcVar};${pcVar}=${pcVar}+1;` +
+                `local ${opVar}=${opCol0}[${qVar}];` +
                 `${bst0} end;` +
                 `${recFrameEnd}`;
         } else {
             dispatchLoopCode =
                 `while ${pcVar}<=_ni do ` +
-                `local _q=${pcVar};${pcVar}=${pcVar}+1;` +
-                `local ${opVar}=_bx(${opCol0}[_q],_om0);` +
+                `local ${qVar}=${pcVar};${pcVar}=${pcVar}+1;` +
+                `local ${opVar}=_bx(${opCol0}[${qVar}],_om0);` +
                 `${bst0} end;` +
                 `${wipeEpEnd}${recFrameEnd}`;
         }
     }
+
+    const dkInitLine = ``;
 
     const mbaInitLine = ctx.mbaCodecs.length > 0
         ? `local ${mbaDecVar}=${mbaInitExpr};`
@@ -858,28 +1114,29 @@ export function generateV5Lua(container, ctx, options = {}, rng) {
         ? `do local _col=${9 + ctx.modes[0].role.op};for _pi=1,#${poolVar} do local _pp=${poolVar}[_pi];local _oc=_pp[_col];for _i=1,_pp[8] do _oc[_i]=_bx(_oc[_i],_om0) end end end;`
         : ``;
 
-    uEntries.push(`[${P.run}]=function(U,${poolVar},${kSecVar},${twVar})` +
+    uEntries.push(`[${P.run}]=function(U,${poolVar},${kSecVar},${k1Var},${k2Var},${k3Var},${twVar})` +
         `local _bx,_ba,_rs,_mf,_tu,_tpack,_tc,_ty,_sel,_pc2,_xpc2,_nx,_gm=` +
             `U[${P.bx}],U[${P.ba}],U[${P.rs}],U[${P.mf}],U[${P.tu}],U[${P.tp}],U[${P.tc}],U[${P.ty}],U[${P.sel}],U[${P.pc}],U[${P.xpc}],U[${P.nx}],U[${P.gm}];` +
         `local _tclr=(_ty(table)=="table"and table.clear)or function(t)for _ri=1,#t do t[_ri]=nil end end;` +
         `local _kLo=_ba(${kSecVar},255);` +
         `local _fp,_fpn={},0;local _sc=0;` +
         omInitLine +
+        dkInitLine +
         fastPreUnmask +
         mbaInitLine +
         `local _vm;_vm=function(_pr,${upVar},${envVar},_a1,_a2,_a3,_a4,_vaArg,_vacArg)` +
         (isFastMode
-            ? `local ${kVar}=_pr[1];local _npa=_pr[2];local _mr=_pr[3];local _isVa=_pr[4];local _ni=_pr[8];`
-            : `local ${kVar}=_pr[1];local _npa=_pr[2];local _mr=_pr[3];local _isVa=_pr[4];local ${modeVar}=_pr[5];local _ni=_pr[8];local _ep=_pr[14];`
+            ? `local ${kVar}=_pr[1];local _npa=_pr[2];local _mr=_pr[3];local _isVa=_pr[4];local _ni=_pr[8];local ${rbVar}=_pr[17];local ${kbVar}=_pr[18];`
+            : `local ${kVar}=_pr[1];local _npa=_pr[2];local _mr=_pr[3];local _isVa=_pr[4];local ${modeVar}=_pr[5];local _ni=_pr[8];local _ep=_pr[14];local ${rbVar}=_pr[17];local ${kbVar}=_pr[18];local ${stVar}=_bx(${k2Var},_pr[19]);`
         ) +
-        `local _c0,_c1,_c2,_c3,_c4=_pr[9],_pr[10],_pr[11],_pr[12],_pr[13];` +
-        `local ${rVar};if _fpn>0 then ${rVar}=_fp[_fpn];_fp[_fpn]=nil;_fpn=_fpn-1 else ${rVar}=_tc(_mr+2) end;` +
+        `local ${cArrVars[0]},${cArrVars[1]},${cArrVars[2]},${cArrVars[3]},${cArrVars[4]}=_pr[9],_pr[10],_pr[11],_pr[12],_pr[13];` +
+        `local ${rVar};if _fpn>0 then ${rVar}=_fp[_fpn];_fp[_fpn]=nil;_fpn=_fpn-1 else ${rVar}=_tc(_mr+${rbVar}+4) end;` +
         `local _va,_vac;` +
         `if not _isVa and _npa<=4 then ` +
-            `if _npa>=1 then ${rVar}[1]=_a1 end;if _npa>=2 then ${rVar}[2]=_a2 end;` +
-            `if _npa>=3 then ${rVar}[3]=_a3 end;if _npa>=4 then ${rVar}[4]=_a4 end ` +
+            `if _npa>=1 then ${rVar}[${rbVar}]=_a1 end;if _npa>=2 then ${rVar}[${rbVar}+1]=_a2 end;` +
+            `if _npa>=3 then ${rVar}[${rbVar}+2]=_a3 end;if _npa>=4 then ${rVar}[${rbVar}+3]=_a4 end ` +
         `else ` +
-            `for _i=1,((_vacArg<_npa)and _vacArg or _npa)do ${rVar}[_i]=_vaArg[_i] end;` +
+            `for _i=1,((_vacArg<_npa)and _vacArg or _npa)do ${rVar}[${rbVar}+_i-1]=_vaArg[_i] end;` +
             `if _isVa then _vac=_vacArg-_npa;if _vac<0 then _vac=0 end;if _vac>0 then _va={};for _i=1,_vac do _va[_i]=_vaArg[_npa+_i] end end end ` +
         `end;` +
         `local ${pcVar}=1;local ${openUvVar};local ${topVar}=0;` +
@@ -887,15 +1144,15 @@ export function generateV5Lua(container, ctx, options = {}, rng) {
         `end;return _vm end`
     );
 
-    // 6. Boot Method `U[P.boot](U, ...)`
+    // 6. Boot Method `U[P.boot](U, ...)` -> threads 4x32-bit key vector (_k0.._k3)
     uEntries.push(`[${JSON.stringify(P.boot)}]=function(U,...)` +
-        `local _ks=U:${methSec}();` +
-        `local _pl,_ri,_ds=U:${methParse}(_ks);` +
+        `local _k0,_k1,_k2,_k3=U:${methSec}();` +
+        `local _pl,_ri,_ds=U:${methParse}(_k0,_k1,_k2,_k3);` +
         `local _nf={};` +
         `local _env=U:${methEnv}(_nf);` +
         (hasNative ? `U[${P.nfInit}](U,_nf,_env,_ds);` : ``) +
         `local _tw;do local _t=_env[${uSym.sc}(116,97,115,107)];if ${uSym.ty}(_t)=="table"then _tw=_t[${uSym.sc}(119,97,105,116)]end end;` +
-        `local _vm=U[${P.run}](U,_pl,_ks,_tw);` +
+        `local _vm=U[${P.run}](U,_pl,_k0,_k1,_k2,_k3,_tw);` +
         `local _ac=${uSym.sel}("#",...);local _ag={...};` +
         `return _vm(_pl[_ri],{},_env,_ag[1],_ag[2],_ag[3],_ag[4],_ag,_ac) end`
     );

@@ -3618,14 +3618,14 @@ export function generateRegVM(chunk, options = {}) {
         console.log(`[RegVM] DUMP_RAW: saved ${output.length} chars to debug-vm-raw.lua`);
     }
     // Direct Native Register Virtual Machine output (Zero loadstring at runtime)
-    console.log(`[RegVM] Emitting Sentinel Engine v5.1 APEX Variable-Length Buffer VM + 2-Layer Nested CFF`);
+    console.log(`[RegVM] Emitting Sentinel Engine v5.3 APEX Variable-Length Buffer VM + 2-Layer Nested CFF`);
     output = `return(function(...) ${output} end)(...)`;
     if (!options._noWatermark) {
         const art = [
             "-- ==============================================================================",
-            "--  PAYOMBØYZ Sentinel Engine v5.1 APEX -- VARIABLE-LEN BUFFER VM & NESTED CFF",
-            "--  Cryptographic Protection: Variable-Width Buffer Bytecode + Rolling Xorshift32 + 2-Layer CFF",
-            "--  Tamper Resistance: Dead-Op Wipe, Encrypted Shadow Restore & FNV-1a Anti-Hook Guards",
+            "--  PAYOMBØYZ Sentinel Engine v5.3 APEX -- ROLLING-STATE BLOCK CIPHER & MERGED ISA",
+            "--  Cryptographic Protection: Path-Dependent Block Key + Merged/Split Ops + 128-bit ARX",
+            "--  Tamper Resistance: Anti-SCCP Opaque CFG, Register Permutation & C-Closure Guards",
             "-- =============================================================================="
         ];
         output = `--[[\n${art.join('\n')}\n]]\n` + output;

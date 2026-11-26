@@ -1,5 +1,5 @@
 // language: JavaScript, file: v5-macros-native.js, target: Node.js ESM
-// PAYOMBOYZ Sentinel v5.1 APEX: Macro Preprocessing, Execution Tiers, Lexical Free-Var Analysis & Hardened Native Luau Emitter
+// PAYOMBOYZ Sentinel v5.3 APEX: Macro Preprocessing, LPH_ATTRIBUTES, Execution Tiers, Lexical Free-Var Analysis & Hardened Native Luau Emitter
 
 const OBFUSCATED_MACROS = new Set(["PBZ_OBFUSCATED", "LPH_OBFUSCATED", "MCY_OBFUSCATED"]);
 const LINE_MACROS = new Set(["PBZ_LINE", "LPH_LINE", "MCY_LINE"]);
@@ -7,7 +7,85 @@ const CRASH_MACROS = new Set(["PBZ_CRASH", "LPH_CRASH", "MCY_CRASH"]);
 const JIT_MACROS = new Set(["PBZ_JIT", "LPH_JIT", "MCY_JIT"]);
 const JITMAX_MACROS = new Set(["PBZ_JITMAX", "LPH_JIT_MAX", "MCY_JITMAX"]);
 const NO_VIRT_MACROS = new Set(["PBZ_NO_VIRTUALIZE", "LPH_NO_VIRTUALIZE", "MCY_NO_VIRTUALIZE"]);
+const ATTR_MACROS = new Set(["LPH_ATTRIBUTES", "PBZ_ATTRIBUTES", "MCY_ATTRIBUTES"]);
+const STRICT_ROBLOX_MACROS = new Set(["PBZ_STRICT_ROBLOX", "LPH_STRICT_ROBLOX"]);
 const HOT_SIGNAL_RE = /RenderStepped|Heartbeat|Stepped/;
+
+function extractAttrInfoFromCall(callExpr) {
+    const info = { vmNone: false, tier: null, strictRoblox: false };
+    const visitAttrArg = (node) => {
+        if (!node || typeof node !== "object") return;
+        if (node.type === "Identifier") {
+            const nm = String(node.name || "").toUpperCase();
+            if (nm === "NO_VIRTUALIZE" || nm === "NONE") info.vmNone = true;
+            else if (nm === "FAST" || nm === "JIT") info.tier = "jit";
+            else if (nm === "JIT_MAX" || nm === "JITMAX") info.tier = "jitmax";
+            else if (nm === "SECURE" || nm === "ONYX" || nm === "MAX") info.tier = "max";
+            else if (nm === "STRICT_ROBLOX" || nm === "ROBLOX_ONLY") info.strictRoblox = true;
+        } else if (node.type === "StringLiteral") {
+            const nm = String(node.value || "").toUpperCase();
+            if (nm === "NONE" || nm === "NO_VIRTUALIZE") info.vmNone = true;
+            else if (nm === "FAST" || nm === "JIT") info.tier = "jit";
+            else if (nm === "JIT_MAX" || nm === "JITMAX") info.tier = "jitmax";
+            else if (nm === "SECURE" || nm === "ONYX" || nm === "MAX") info.tier = "max";
+            else if (nm === "STRICT_ROBLOX" || nm === "ROBLOX_ONLY") info.strictRoblox = true;
+        } else if (node.type === "CallExpression") {
+            const cname = node.callee?.type === "Identifier" ? String(node.callee.name || "").toUpperCase() : "";
+            const arg0 = node.args?.[0];
+            if (cname === "VM") {
+                const v = (arg0?.type === "Identifier" ? arg0.name : arg0?.value || "").toUpperCase();
+                if (v === "NONE") info.vmNone = true;
+                else if (v === "ONYX" || v === "MAX") info.tier = "max";
+            } else if (cname === "PRESET") {
+                const v = (arg0?.type === "Identifier" ? arg0.name : arg0?.value || "").toUpperCase();
+                if (v === "FAST") info.tier = "jit";
+                else if (v === "SECURE" || v === "ONYX") info.tier = "max";
+            } else if (cname === "STRICT_ROBLOX" || cname === "ROBLOX_ONLY") {
+                info.strictRoblox = arg0?.type === "BooleanLiteral" ? Boolean(arg0.value) : true;
+            }
+            for (const a of node.args || []) visitAttrArg(a);
+        } else if (node.type === "TableConstructor") {
+            for (const f of node.fields || []) {
+                if (f.kind === "named") {
+                    const k = String(f.name || "").toUpperCase();
+                    if (k === "VM" && f.value?.value && String(f.value.value).toUpperCase() === "NONE") info.vmNone = true;
+                    if (k === "STRICT_ROBLOX" && f.value?.value !== false) info.strictRoblox = true;
+                }
+                visitAttrArg(f.value);
+            }
+        }
+    };
+    for (const arg of callExpr.args || []) visitAttrArg(arg);
+    return info;
+}
+
+function parseLeadingAttributes(body, scopes) {
+    const out = { vmNone: false, tier: null, strictRoblox: false, stmts: body || [] };
+    if (!Array.isArray(body) || body.length === 0) return out;
+    const kept = [];
+    let leading = true;
+    for (const st of body) {
+        if (leading && st?.type === "FunctionCallStatement" && st.call?.type === "CallExpression" &&
+            st.call.callee?.type === "Identifier" && !hasLocalInScopes(scopes, st.call.callee.name)) {
+            const cname = st.call.callee.name;
+            if (ATTR_MACROS.has(cname)) {
+                const parsed = extractAttrInfoFromCall(st.call);
+                if (parsed.vmNone) out.vmNone = true;
+                if (parsed.tier) out.tier = parsed.tier;
+                if (parsed.strictRoblox) out.strictRoblox = true;
+                continue;
+            }
+            if (STRICT_ROBLOX_MACROS.has(cname)) {
+                out.strictRoblox = true;
+                continue;
+            }
+        }
+        leading = false;
+        kept.push(st);
+    }
+    out.stmts = kept;
+    return out;
+}
 
 const LUAU_KEYWORDS = new Set([
     "and", "break", "continue", "do", "else", "elseif", "end", "export", "false",
@@ -220,6 +298,10 @@ function checkNativeEligibility(fnNode, enclosingLocals, options = {}) {
                 visitExpr(s.value);
                 break;
             case "FunctionCallStatement":
+                if (s.call?.type === "CallExpression" && s.call.callee?.type === "Identifier" &&
+                    ATTR_MACROS.has(s.call.callee.name) && !hasLocalInScopes(fnScopes, s.call.callee.name)) {
+                    break;
+                }
                 visitExpr(s.call);
                 break;
             case "DoStatement":
@@ -326,6 +408,7 @@ function checkNativeEligibility(fnNode, enclosingLocals, options = {}) {
 export function preprocessMacrosAndTiers(ast, options = {}) {
     if (!ast || typeof ast !== "object") return { ast, nativeFuncs: [] };
 
+    let strictRoblox = false;
     const nativeFuncs = [];
     const scopes = [new Set()];
     const push = () => scopes.push(new Set());
@@ -434,9 +517,17 @@ export function preprocessMacrosAndTiers(ast, options = {}) {
                 for (const p of e.params || []) {
                     if (!p.variadic) addLocal(p.name);
                 }
-                const body = e.body?.map(transformStmt);
+                const attr = parseLeadingAttributes(e.body || [], scopes);
+                if (attr.strictRoblox) strictRoblox = true;
+                const body = attr.stmts.map(transformStmt);
                 pop();
-                return { ...e, body };
+                const outFn = { ...e, body };
+                if (attr.tier) outFn.__pbzTier = attr.tier;
+                else if (e.__pbzTier) outFn.__pbzTier = e.__pbzTier;
+                if (attr.vmNone) {
+                    return tryHandleNativeCandidate(outFn, e.loc, outFn);
+                }
+                return outFn;
             }
             case "CallExpression": {
                 if (e.callee?.type === "Identifier" && !hasLocalInScopes(scopes, e.callee.name)) {
@@ -577,9 +668,14 @@ export function preprocessMacrosAndTiers(ast, options = {}) {
                 for (const p of s.params || []) {
                     if (!p.variadic) addLocal(p.name);
                 }
-                const body = s.body?.map(transformStmt);
+                const attr = parseLeadingAttributes(s.body || [], scopes);
+                if (attr.strictRoblox) strictRoblox = true;
+                const body = attr.stmts.map(transformStmt);
                 pop();
-                return { ...s, body };
+                const outStmt = { ...s, body };
+                if (attr.tier) outStmt.__pbzTier = attr.tier;
+                else if (attr.vmNone) outStmt.__pbzTier = "jitmax";
+                return outStmt;
             }
             case "FunctionStatement": {
                 const base = s.name?.base?.type === "Identifier"
@@ -590,9 +686,14 @@ export function preprocessMacrosAndTiers(ast, options = {}) {
                 for (const p of s.params || []) {
                     if (!p.variadic) addLocal(p.name);
                 }
-                const body = s.body?.map(transformStmt);
+                const attr = parseLeadingAttributes(s.body || [], scopes);
+                if (attr.strictRoblox) strictRoblox = true;
+                const body = attr.stmts.map(transformStmt);
                 pop();
-                return { ...s, name: { ...s.name, base }, body };
+                const outStmt = { ...s, name: { ...s.name, base }, body };
+                if (attr.tier) outStmt.__pbzTier = attr.tier;
+                else if (attr.vmNone) outStmt.__pbzTier = "jitmax";
+                return outStmt;
             }
             case "ReturnStatement":
                 return { ...s, values: s.values?.map(transformExpr) };
@@ -601,11 +702,14 @@ export function preprocessMacrosAndTiers(ast, options = {}) {
         }
     };
 
+    const topAttr = parseLeadingAttributes(ast.body || [], scopes);
+    if (topAttr.strictRoblox) strictRoblox = true;
     const nextAst = {
         ...ast,
-        body: ast.body?.map(transformStmt) || [],
+        body: topAttr.stmts.map(transformStmt),
     };
-    return { ast: nextAst, nativeFuncs };
+    if (topAttr.tier) nextAst.__pbzTier = topAttr.tier;
+    return { ast: nextAst, nativeFuncs, strictRoblox };
 }
 
 /**
@@ -1244,12 +1348,15 @@ export function emitHardenedNativeLua(fnNode, ctx = {}) {
 
     const params = (fnNode.params || []).map((p) => (p.variadic ? "..." : declareLocal(p.name)));
     const entryParts = [emitEntryOpaqueGuard(rng, bxFn)];
-    if (hoistNames.length > 0) {
-        entryParts.push(`local ${hoistNames.join(",")}=${hoistVals.join(",")}`);
-    }
     const bodyStr = emitBlock(fnNode.body || []);
     if (unsupported) return null;
 
+    if (hoistNames.length > 0) {
+        const lazyChecks = hoistNames.map((nm, i) => `if ${nm}==nil then ${nm}=${hoistVals[i]} end`).join(";");
+        entryParts.push(lazyChecks);
+        const fullBody = bodyStr ? `${entryParts.join(";")};${bodyStr}` : entryParts.join(";");
+        return `(function() local ${hoistNames.join(",")};return function(${params.join(",")}) ${fullBody} end end)()`;
+    }
     const fullBody = bodyStr ? `${entryParts.join(";")};${bodyStr}` : entryParts.join(";");
     return `function(${params.join(",")}) ${fullBody} end`;
 }

@@ -13,16 +13,16 @@ __________  _____ _____.___.________      _____ __________ ________ _____.___.__
  |    |  /    |    \\____   |/    |    \\/    Y    \\    |   \\/    |    \\____   | /     /_ 
  |____|  \\____|__  / ______|\\_______  /\\____|__  /______  /\\_______  / ______|/_______ \\
                  \\/\\/               \\/         \\/       \\/         \\/\\/               \\/
-          \\_Welcome to PAYOMBOYZ Security (Sentinel Engine v5.1 APEX) ~ Much Love, dj
+          \\_Welcome to PAYOMBOYZ Security (Sentinel Engine v5.3 APEX) ~ Much Love, dj
 
 ]]--
 `;
 
 /**
- * Obfuscates Luau source code using Sentinel Engine v5.1 APEX (ONYX / OPAL):
- * - Level 1: OPAL Fast (SoA Superoperators + Non-Zero K_TARGET + Masked BST + Zero-Plaintext Env)
- * - Level 2: OPAL+ Balanced (Level 1 + Basic-Block CFF + Syntactic Decoys + Lazy Block Decrypt)
- * - Level 3: ONYX Maximum Armor (Dual-Mode Asymmetric Dispatcher + 32-bit MBA + Anti-Spy/Anti-vmmap)
+ * Obfuscates Luau source code using Sentinel Engine v5.3 APEX (ONYX / OPAL):
+ * - Level 1: OPAL Fast (SoA Superoperators + 128-bit ARX Keys + Masked BST + Zero-Plaintext Env)
+ * - Level 2: OPAL+ Balanced (Level 1 + Rolling-State Block Cipher + Merged/Split Ops + Shifted _rb/_kb + Reg Perm)
+ * - Level 3: ONYX Maximum Armor (Dual-Mode Asymmetric Dispatcher + IR State Machine + Anti-SCCP Opaque + MBA + Strict Roblox)
  *
  * @param {string} source - Raw Luau/Lua code
  * @param {object} options - Protection configurations
@@ -57,7 +57,7 @@ export function obfuscateWithVM(source, options = {}) {
   const ast = parse(tokens);
 
   // 4. Macros, Execution Tiers & Hardened Native Extraction
-  const { ast: preAst, nativeFuncs } = preprocessMacrosAndTiers(ast, {
+  const { ast: preAst, nativeFuncs, strictRoblox: preStrictRoblox } = preprocessMacrosAndTiers(ast, {
     placeId: options.placeId || options.targetPlaceId || 0,
     target: options.target,
     disableNative: options.disableNative,
@@ -89,7 +89,7 @@ export function obfuscateWithVM(source, options = {}) {
     disableFeatures.push('controlFlowFlattening');
   }
 
-  // 8. VM Runtime Synthesis (Sentinel Engine v5.1 APEX)
+  // 8. VM Runtime Synthesis (Sentinel Engine v5.3 APEX)
   let vmOutput = generateRegVM(chunk, {
     level: isDebug ? 'debug' : (isLevel1 ? 'fast' : (isLevel2 ? 'normal' : 'max')),
     executorGlobals: true,
@@ -97,7 +97,7 @@ export function obfuscateWithVM(source, options = {}) {
     debugTrace: options.debugTrace ?? isDebug,
     noMinify: options.noMinify ?? false,
     placeId: options.placeId || options.targetPlaceId || 0,
-    robloxOnly: Boolean(options.robloxOnly),
+    robloxOnly: Boolean(options.robloxOnly || options.strictRoblox || preStrictRoblox),
     nativeFuncs,
     disableFeatures
   });

@@ -1,6 +1,8 @@
 // language: JavaScript, file: v5-serializer.js, target: Node.js ESM
-// Sentinel v5.0 Binary Container Serializer:
-// Deduplicated S-Box+LCG Encrypted Master String Pool + Flat Post-Order SoA Proto Stream + LZSS + K_sec-Coupled RC4 + Shuffled Base85+Dict
+// Sentinel v5.2 APEX Binary Container Serializer:
+// Deduplicated S-Box+LCG Master String Pool (K1/K2/K3) + AoS Interleaved Rolling-LCG Proto Stream
+// + Per-Proto Shifted (_rb/_kb) + LZSS + Zero-Oracle 9-Byte Header (with FNV32 Integrity MAC)
+// + 128-bit RC4 + Drop-256 + Rolling ARX Keystream + Shuffled Base85+Dict
 
 function toUTF8Bytes(s) {
     return Buffer.from(s, "utf8");
@@ -82,13 +84,18 @@ function writeVarU32(out, val) {
     out.push(v);
 }
 
+function writeU32LE(out, val) {
+    const v = val >>> 0;
+    out.push(v & 0xFF, (v >>> 8) & 0xFF, (v >>> 16) & 0xFF, (v >>> 24) & 0xFF);
+}
+
 function writeF64(out, val) {
     const b = Buffer.allocUnsafe(8);
     b.writeDoubleLE(val, 0);
     for (let i = 0; i < 8; i++) out.push(b[i]);
 }
 
-function rc4Crypt(data, keyBytes) {
+function rc4ArxCrypt(data, keyBytes, dropN, arxInit) {
     const S = new Uint8Array(256);
     for (let i = 0; i < 256; i++) S[i] = i;
     let j = 0;
@@ -97,13 +104,22 @@ function rc4Crypt(data, keyBytes) {
         j = (j + S[i] + keyBytes[i % kLen]) & 0xFF;
         const t = S[i]; S[i] = S[j]; S[j] = t;
     }
-    const out = new Uint8Array(data.length);
     let a = 0, b = 0;
+    for (let d = 0; d < dropN; d++) {
+        a = (a + 1) & 0xFF;
+        b = (b + S[a]) & 0xFF;
+        const t = S[a]; S[a] = S[b]; S[b] = t;
+    }
+    const out = new Uint8Array(data.length);
+    let arx = arxInit >>> 0;
     for (let k = 0; k < data.length; k++) {
         a = (a + 1) & 0xFF;
         b = (b + S[a]) & 0xFF;
         const t = S[a]; S[a] = S[b]; S[b] = t;
-        out[k] = data[k] ^ S[(S[a] + S[b]) & 0xFF];
+        const rc4Byte = S[(S[a] + S[b]) & 0xFF];
+        arx = (Math.imul(arx, 1664525) + 1013904223) >>> 0;
+        const arxByte = (arx >>> 16) & 0xFF;
+        out[k] = data[k] ^ rc4Byte ^ arxByte;
     }
     return out;
 }
@@ -209,11 +225,10 @@ export function serializeV5Container(v5Root, ctx, rng, extraStrings = []) {
     collectPostOrder(v5Root);
     const rootProtoIdx = flatProtos.length - 1; // 0-based
 
-    // 3. Build deduplicated Master Encrypted String Pool
+    // 3. Build deduplicated Master Encrypted String Pool (coupled to K1, K2, K3)
     const poolBytes = [];
     const strCache = new Map();
-    const kLo = ctx.K_TARGET & 0xFF;
-    const kHi = (ctx.K_TARGET >>> 8) & 0xFF;
+    const kBytes = ctx.kBytes;
 
     function internString(str) {
         const existing = strCache.get(str);
@@ -222,10 +237,10 @@ export function serializeV5Container(v5Root, ctx, rng, extraStrings = []) {
         const offset = poolBytes.length; // 0-based byte offset in pool
         const len = utf8.length;
         const strSalt = 1 + Math.floor(rng() * 0xFFFFFF);
-        let lcg = (strSalt ^ ctx.K_TARGET) >>> 0;
+        let lcg = (strSalt ^ ctx.K1) >>> 0;
         for (let i = 0; i < len; i++) {
             lcg = (Math.imul(lcg, 1664525) + 1013904223) >>> 0;
-            const kByte = ((lcg >>> 16) ^ ((i & 1) ? kHi : kLo)) & 0xFF;
+            const kByte = ((lcg >>> 16) ^ kBytes[8 + (i & 7)]) & 0xFF;
             const sub = sbox[utf8[i]];
             poolBytes.push((sub ^ kByte) & 0xFF);
         }
@@ -234,15 +249,22 @@ export function serializeV5Container(v5Root, ctx, rng, extraStrings = []) {
         return entry;
     }
 
+    // Randomized wire column order for interleaved instruction stream
+    const wireColOrder = [0, 1, 2, 3, 4];
+    for (let i = wireColOrder.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [wireColOrder[i], wireColOrder[j]] = [wireColOrder[j], wireColOrder[i]];
+    }
+
     // 4. Write binary payload:
     //   [poolLen (varu32)] [poolBytes...]
     //   [nProtos (varu32)] [rootIdx (varu32)]
-    //   For each proto:
-    //     [nParams (varu32)] [maxRegs (varu32)] [flags (u8: bit0=isVararg, bit1=entryMode, bit2=isEphemeral, bit3=isHot, bit4=hasClosures)]
-    //     [nK (varu32)] -> K entries
-    //     [nUp (varu32)] -> (isLocal u8, idx varu32)
-    //     [nChild (varu32)] -> childIdx (varu32)
-    //     [nInstr (varu32)] -> arr0[0..n-1]..arr4[0..n-1] (varu32 each)
+    //   For each proto pi:
+    //     [nParams] [maxRegs] [flags] [encRb] [encKb]
+    //     [nK] -> K entries
+    //     [nUp] -> (isLocal u8, idx varu32)
+    //     [nChild] -> childIdx (varu32)
+    //     [nInstr] -> interleaved AoS in wireColOrder XORed with per-proto LCG(K1 ^ (pi+1)*0x9E3779B1)
     const bin = [];
     for (let i = 0; i < flatProtos.length; i++) {
         for (const k of flatProtos[i].K) {
@@ -261,7 +283,11 @@ export function serializeV5Container(v5Root, ctx, rng, extraStrings = []) {
     writeVarU32(bin, flatProtos.length);
     writeVarU32(bin, rootProtoIdx);
 
-    for (const p of flatProtos) {
+    const k2Mask16 = ctx.K2 & 0xFFFF;
+    const k3Mask16 = ctx.K3 & 0xFFFF;
+
+    for (let pi = 0; pi < flatProtos.length; pi++) {
+        const p = flatProtos[pi];
         writeVarU32(bin, p.nParams);
         writeVarU32(bin, p.maxRegs);
         const flags =
@@ -271,6 +297,10 @@ export function serializeV5Container(v5Root, ctx, rng, extraStrings = []) {
             (p.isHot ? 8 : 0) |
             (p.hasClosures ? 16 : 0);
         bin.push(flags);
+
+        writeVarU32(bin, ((p.regBase ^ k3Mask16) >>> 0));
+        writeVarU32(bin, ((p.kBase ^ k2Mask16) >>> 0));
+        writeVarU32(bin, ((p.protoSalt ^ ctx.K3) >>> 0));
 
         writeVarU32(bin, p.K.length);
         for (const k of p.K) {
@@ -304,17 +334,20 @@ export function serializeV5Container(v5Root, ctx, rng, extraStrings = []) {
         }
 
         writeVarU32(bin, p.nInstr);
-        const arrays = [p.arr0, p.arr1, p.arr2, p.arr3, p.arr4];
-        for (const arr of arrays) {
-            for (let i = 0; i < p.nInstr; i++) {
-                writeVarU32(bin, arr[i] >>> 0);
+        const cols = [p.arr0, p.arr1, p.arr2, p.arr3, p.arr4];
+        let pLcg = (ctx.K1 ^ Math.imul(pi + 1, 2654435761)) >>> 0;
+        for (let i = 0; i < p.nInstr; i++) {
+            for (const c of wireColOrder) {
+                pLcg = (Math.imul(pLcg, 1664525) + 1013904223) >>> 0;
+                const val = ((cols[c][i] >>> 0) ^ pLcg) >>> 0;
+                writeVarU32(bin, val);
             }
         }
     }
 
     const rawBytes = Uint8Array.from(bin);
 
-    // 5. Optional LZSS compression (with 1-byte header flag: 0=raw, 1=lzss)
+    // 5. Optional LZSS compression + Zero-Oracle 9-byte Encrypted Header + 32-bit FNV MAC
     let bodyBytes = rawBytes;
     let compressedFlag = 0;
     if (rawBytes.length >= 64) {
@@ -325,23 +358,43 @@ export function serializeV5Container(v5Root, ctx, rng, extraStrings = []) {
         }
     }
 
-    const framed = new Uint8Array(1 + 4 + bodyBytes.length);
-    framed[0] = compressedFlag;
-    framed[1] = rawBytes.length & 0xFF;
-    framed[2] = (rawBytes.length >>> 8) & 0xFF;
-    framed[3] = (rawBytes.length >>> 16) & 0xFF;
-    framed[4] = (rawBytes.length >>> 24) & 0xFF;
-    framed.set(bodyBytes, 5);
+    const flagRaw = Math.floor(rng() * 256);
+    let flagComp = Math.floor(rng() * 256);
+    if (flagComp === flagRaw) flagComp = (flagRaw + 73) & 0xFF;
 
-    // 6. K_sec-coupled RC4 encryption
-    const rc4KeyLen = 20;
+    // 32-bit integrity MAC over rawBytes seeded by (K0 ^ K1)
+    let mac32 = (ctx.K0 ^ ctx.K1) >>> 0;
+    for (let i = 0; i < rawBytes.length; i++) {
+        mac32 = Math.imul((mac32 ^ rawBytes[i]) >>> 0, 16777619) >>> 0;
+    }
+
+    const encFlag = ((compressedFlag ? flagComp : flagRaw) ^ (ctx.K2 & 0xFF)) & 0xFF;
+    const encRawLen = (rawBytes.length ^ ctx.K3) >>> 0;
+    const encMac = (mac32 ^ ctx.K0) >>> 0;
+
+    const framed = new Uint8Array(9 + bodyBytes.length);
+    framed[0] = encFlag;
+    framed[1] = encRawLen & 0xFF;
+    framed[2] = (encRawLen >>> 8) & 0xFF;
+    framed[3] = (encRawLen >>> 16) & 0xFF;
+    framed[4] = (encRawLen >>> 24) & 0xFF;
+    framed[5] = encMac & 0xFF;
+    framed[6] = (encMac >>> 8) & 0xFF;
+    framed[7] = (encMac >>> 16) & 0xFF;
+    framed[8] = (encMac >>> 24) & 0xFF;
+    framed.set(bodyBytes, 9);
+
+    // 6. 128-bit K_Bytes-coupled RC4 + Drop-256 + Rolling ARX Keystream
+    const rc4KeyLen = 24;
     const rawRc4Key = new Array(rc4KeyLen);
     const derivedRc4Key = new Uint8Array(rc4KeyLen);
     for (let i = 0; i < rc4KeyLen; i++) {
         rawRc4Key[i] = Math.floor(rng() * 256);
-        derivedRc4Key[i] = (rawRc4Key[i] ^ ((i & 1) ? kHi : kLo)) & 0xFF;
+        derivedRc4Key[i] = (rawRc4Key[i] ^ kBytes[i % 16]) & 0xFF;
     }
-    const cipherBytes = rc4Crypt(framed, derivedRc4Key);
+    const rc4DropN = 256 + (ctx.K0 % 127);
+    const arxStreamInit = (ctx.K1 ^ ctx.K2) >>> 0;
+    const cipherBytes = rc4ArxCrypt(framed, derivedRc4Key, rc4DropN, arxStreamInit);
 
     // 7. Shuffled Base85 + Dictionary Compression + Split Chunks
     const { alphabet, dictTokens } = createAlphabetAndDict(rng);
@@ -367,6 +420,10 @@ export function serializeV5Container(v5Root, ctx, rng, extraStrings = []) {
         alphabet: alphabet.join(""),
         dictMap,
         rawRc4Key,
+        rc4DropN,
+        flagRaw,
+        flagComp,
+        wireColOrder,
         invSbox,
         tags: { TAG_NIL, TAG_FALSE, TAG_TRUE, TAG_NUM, TAG_STR },
         rawByteLen: rawBytes.length,

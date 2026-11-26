@@ -193,9 +193,9 @@ DEOBF_ENGINES = [
 
 # Engine choices — obfuscate (label, value)
 OBF_ENGINES = [
-    ("🟢 Level 1: OPAL Fast (Sentinel Engine v5.1 APEX / 60-120FPS Zero-Lag)", "level1"),
-    ("🟡 Level 2: OPAL+ Balanced (Sentinel Engine v5.1 APEX / CFF + Self-Wipe - แนะนำ)", "level2"),
-    ("🔴 Level 3: ONYX Maximum Armor (Sentinel Engine v5.1 APEX / Dual-Mode MBA + Tier-A Native)", "level3"),
+    ("🟢 Level 1: OPAL Fast (Sentinel Engine v5.3 APEX / 60-120FPS Zero-Lag)", "level1"),
+    ("🟡 Level 2: OPAL+ Balanced (Sentinel Engine v5.3 APEX / Rolling Block Cipher - แนะนำ)", "level2"),
+    ("🔴 Level 3: ONYX Maximum Armor (Sentinel Engine v5.3 APEX / Rolling Cipher + IR CFF + Merged ISA)", "level3"),
 ]
 
 
@@ -411,13 +411,21 @@ async def dispatch_result_to_channel_or_interaction(
 
     # 1. ALWAYS deliver directly to the user who requested it!
     delivered = False
-    action_view = DeobfResultActionView() if action_type == "DEOBFUSCATE" else None
+    send_kwargs = {"embed": embed, "files": user_files}
+    if action_type == "DEOBFUSCATE":
+        send_kwargs["view"] = DeobfResultActionView()
     try:
-        await interaction.followup.send(embed=embed, files=user_files, view=action_view, ephemeral=True)
+        await interaction.followup.send(**send_kwargs, ephemeral=True)
         delivered = True
     except Exception:
+        for uf in user_files:
+            if hasattr(uf, "fp") and hasattr(uf.fp, "seek"):
+                try:
+                    uf.fp.seek(0)
+                except Exception:
+                    pass
         try:
-            await interaction.followup.send(embed=embed, files=user_files, view=action_view)
+            await interaction.followup.send(**send_kwargs)
             delivered = True
         except Exception as e:
             print(f"[PANEL DISPATCH] Followup delivery fallback: {e}", flush=True)
@@ -467,10 +475,10 @@ DEFAULT_PANEL_DESCRIPTION = (
 
     "• 📦 Base64 / A7DEV\n\n"
 
-    "**🔒 เอนจินป้องกันโค้ด (Sentinel Engine v5.1 APEX ONYX / OPAL)**\n"
-    "• 🔴 Level 3: ONYX Maximum Armor (Dual-Mode MBA + Tier-A Native + IEEE-754 -0.0 Self-Wipe)\n"
-    "• 🟡 Level 2: OPAL+ Balanced (Basic-Block CFF + Self-Wipe Root + Sharded Trampolines)\n"
-    "• 🟢 Level 1: OPAL Fast (SoA FASTCALL VM + Tier-A Native Macros, 60-120FPS Zero-Lag)\n\n"
+    "**🔒 เอนจินป้องกันโค้ด (Sentinel Engine v5.3 APEX ONYX / OPAL)**\n"
+    "• 🔴 Level 3: ONYX Maximum Armor (Rolling-State Block Cipher + IR State-Machine + Merged/Split ISA + Strict Roblox Lock)\n"
+    "• 🟡 Level 2: OPAL+ Balanced (Rolling Block Cipher + Register Permutation + Merged/Split ISA)\n"
+    "• 🟢 Level 1: OPAL Fast (SoA FASTCALL VM + Tier-A Native Macros + LPH_ATTRIBUTES, 60-120FPS Zero-Lag)\n\n"
 
     "**💡 วิธีใช้งานผ่านแผงควบคุม(How to Use)**\n"
 
@@ -1006,7 +1014,8 @@ class DeobfuscateModal(discord.ui.Modal, title="PAYOMBOYZ Deobfuscator V10.0"):
         self.engine_choice = engine_choice or "auto"
 
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True, thinking=True)
         from bot.ai_deobf_bot import ORCHESTRATOR, save_temp_input, build_deobf_embed, QUALITY_MONITOR
         from bot import panel as _panel_perm
 
@@ -1143,7 +1152,7 @@ class DeobfuscateModal(discord.ui.Modal, title="PAYOMBOYZ Deobfuscator V10.0"):
 
 
 
-class ObfuscateModal(discord.ui.Modal, title="PAYOMBOYZ Sentinel Engine v5.1 APEX"):
+class ObfuscateModal(discord.ui.Modal, title="PAYOMBOYZ Sentinel Engine v5.3 APEX"):
     filename_input = discord.ui.TextInput(
         label="ชื่อไฟล์ Output (ไม่บังคับ)",
         placeholder="Protected.lua",
@@ -1164,7 +1173,8 @@ class ObfuscateModal(discord.ui.Modal, title="PAYOMBOYZ Sentinel Engine v5.1 APE
         self.engine_choice = engine_choice or "level2"
 
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True, thinking=True)
         from bot.ai_deobf_bot import ORCHESTRATOR, save_temp_input, build_obfuscate_embed
 
         code_text = self.code_input.value.strip()
@@ -1272,7 +1282,7 @@ class FileConfigModal(discord.ui.Modal):
         raw_bytes: Optional[bytes] = None,
         engine_choice: Optional[str] = None
     ):
-        modal_title = "PAYOMBOYZ Deobfuscator V10.0" if mode == "deobf" else "PAYOMBOYZ Sentinel Engine v5.1 APEX"
+        modal_title = "PAYOMBOYZ Deobfuscator V10.0" if mode == "deobf" else "PAYOMBOYZ Sentinel Engine v5.3 APEX"
         super().__init__(title=modal_title)
         self.mode = mode
         self.attachment = attachment
@@ -1292,7 +1302,8 @@ class FileConfigModal(discord.ui.Modal):
         self.add_item(self.filename_input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True, thinking=True)
         from bot.ai_deobf_bot import ORCHESTRATOR, save_temp_input, build_deobf_embed, build_obfuscate_embed, QUALITY_MONITOR
         from bot import panel as _panel_perm
 
@@ -1483,20 +1494,20 @@ class EphemeralConfigView(discord.ui.View):
         else:
             options = [
                 discord.SelectOption(
-                    label="🟢 Level 1: OPAL Fast (Sentinel Engine v5.1 APEX / 60-120FPS)",
+                    label="🟢 Level 1: OPAL Fast (Sentinel Engine v5.3 APEX / 60-120FPS)",
                     value="level1",
                     description="SoA FASTCALL VM, Tier-A Native Macros & Masked BST"
                 ),
                 discord.SelectOption(
-                    label="🟡 Level 2: OPAL+ Balanced (Sentinel Engine v5.1 APEX - แนะนำ)",
+                    label="🟡 Level 2: OPAL+ Balanced (Sentinel Engine v5.3 APEX - แนะนำ)",
                     value="level2",
-                    description="Basic-Block CFF + -0.0 Self-Wipe + Sharded Trampolines",
+                    description="Rolling Block Cipher + Reg Perm + Merged/Split ISA",
                     default=True
                 ),
                 discord.SelectOption(
-                    label="🔴 Level 3: ONYX Maximum Armor (Sentinel Engine v5.1 APEX)",
+                    label="🔴 Level 3: ONYX Maximum Armor (Sentinel Engine v5.3 APEX)",
                     value="level3",
-                    description="Dual-Mode MBA + Tier-A Native + C-Closure Anti-Hook"
+                    description="Rolling Cipher + IR CFF + Dual-Mode MBA + Anti-Hook"
                 ),
             ]
             placeholder = "🔒 เลือกระดับความปลอดภัย (Obfuscation Level)..."
@@ -2090,20 +2101,20 @@ class OpenConfigModalView(discord.ui.View):
         else:
             options = [
                 discord.SelectOption(
-                    label="🟢 Level 1: OPAL Fast (Sentinel Engine v5.1 APEX / 60-120FPS)",
+                    label="🟢 Level 1: OPAL Fast (Sentinel Engine v5.3 APEX / 60-120FPS)",
                     value="level1",
                     description="SoA FASTCALL VM, Tier-A Native Macros & Masked BST"
                 ),
                 discord.SelectOption(
-                    label="🟡 Level 2: OPAL+ Balanced (Sentinel Engine v5.1 APEX - แนะนำ)",
+                    label="🟡 Level 2: OPAL+ Balanced (Sentinel Engine v5.3 APEX - แนะนำ)",
                     value="level2",
-                    description="Basic-Block CFF + -0.0 Self-Wipe + Sharded Trampolines",
+                    description="Rolling Block Cipher + Reg Perm + Merged/Split ISA",
                     default=True
                 ),
                 discord.SelectOption(
-                    label="🔴 Level 3: ONYX Maximum Armor (Sentinel Engine v5.1 APEX)",
+                    label="🔴 Level 3: ONYX Maximum Armor (Sentinel Engine v5.3 APEX)",
                     value="level3",
-                    description="Dual-Mode MBA + Tier-A Native + C-Closure Anti-Hook"
+                    description="Rolling Cipher + IR CFF + Dual-Mode MBA + Anti-Hook"
                 ),
             ]
             placeholder = "🔒 เลือกระดับความปลอดภัย (Obfuscation Level)..."
@@ -2138,7 +2149,8 @@ class OpenConfigModalView(discord.ui.View):
         row=1
     )
     async def btn_run_direct(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer(thinking=True)
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True, thinking=True)
         modal_executor = FileConfigModal(
             mode=self.mode,
             attachment=self.attachment,
@@ -2200,9 +2212,9 @@ class PanelDirectModalView(discord.ui.View):
             placeholder = "⚙️ เลือก Deobfuscator Engine..."
         else:
             options = [
-                discord.SelectOption(label="🔴 Level 3: ONYX Maximum Armor (แนะนำ)", value="level3", description="Sentinel Engine v5.1 APEX (Dual-Mode MBA + Tier-A Native)", default=True),
-                discord.SelectOption(label="🟡 Level 2: OPAL+ Balanced Security", value="level2", description="Sentinel Engine v5.1 APEX (CFF + -0.0 Self-Wipe)"),
-                discord.SelectOption(label="🟢 Level 1: OPAL Fast", value="level1", description="Sentinel Engine v5.1 APEX (60-120FPS FASTCALL VM)"),
+                discord.SelectOption(label="🔴 Level 3: ONYX Maximum Armor (แนะนำ)", value="level3", description="Sentinel Engine v5.3 APEX (Rolling Cipher + IR CFF + Merged ISA)", default=True),
+                discord.SelectOption(label="🟡 Level 2: OPAL+ Balanced Security", value="level2", description="Sentinel Engine v5.3 APEX (Rolling Block Cipher + Reg Perm)"),
+                discord.SelectOption(label="🟢 Level 1: OPAL Fast", value="level1", description="Sentinel Engine v5.3 APEX (60-120FPS FASTCALL VM)"),
             ]
             placeholder = "🔒 เลือก Obfuscator Engine..."
 

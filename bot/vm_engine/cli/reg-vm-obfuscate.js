@@ -25,7 +25,7 @@ if (!file) {
     process.exit(1);
 }
 const source = readFileSync(file, "utf-8");
-console.error(`[RegVM] Engine: Sentinel Engine v5.1 APEX`);
+console.error(`[RegVM] Engine: Sentinel Engine v5.3 APEX`);
 console.error(`[RegVM] Input: ${file} (${source.length} chars)`);
 console.error(`[RegVM] Level: ${level}`);
 const t0 = Date.now();

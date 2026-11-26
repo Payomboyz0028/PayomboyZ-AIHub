@@ -272,7 +272,7 @@ function transformStatement(stmt, scope) {
             }));
             const body = stmt.body.map((s) => transformStatement(s, scope));
             scope.popScope();
-            return { ...stmt, name, params, body };
+            return { ...stmt, name, params, body, __pbzTier: stmt.__pbzTier };
         }
         case "FunctionStatement": {
             const name = transformFuncName(stmt.name, scope);
@@ -283,7 +283,7 @@ function transformStatement(stmt, scope) {
             }));
             const body = stmt.body.map((s) => transformStatement(s, scope));
             scope.popScope();
-            return { ...stmt, name, params, body };
+            return { ...stmt, name, params, body, __pbzTier: stmt.__pbzTier };
         }
         case "ForNumericStatement": {
             const start = transformExpression(stmt.start, scope);
