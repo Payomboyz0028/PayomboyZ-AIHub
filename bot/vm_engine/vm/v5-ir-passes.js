@@ -1415,13 +1415,15 @@ function finalizeProtoSoA(proto, ctx, rng, isRoot = false) {
         rkOffset: ctx.rkOffset,
     });
 
-    const doIrFlatten = isMax && !isHot && ctx.doCFF && (
-        scale === "small"
-            ? true
-            : (scale === "large"
-                ? (isRoot || (irGraph.blocks.length >= 4 && irGraph.blocks.length <= 40))
-                : (isRoot || (irGraph.blocks.length >= 6 && irGraph.blocks.length <= 30)))
-    );
+    let doIrFlatten = false;
+    if (isMax && !isHot && ctx.doCFF) {
+        if (scale === "small" || isRoot) {
+            doIrFlatten = true;
+        } else if (ctx.flattenBudget > 0 && irGraph.blocks.length >= (scale === "huge" ? 8 : 6) && irGraph.blocks.length <= 24 && instrs.length >= 25) {
+            ctx.flattenBudget--;
+            doIrFlatten = true;
+        }
+    }
     if (doIrFlatten) {
         irFlattenStateMachine(irGraph, proto, ctx, rng);
     }
@@ -1432,7 +1434,16 @@ function finalizeProtoSoA(proto, ctx, rng, isRoot = false) {
 
     let entryMode = 0;
     if (isMax && irGraph.blocks.length >= 2) {
-        entryMode = applyDualModePartition(irGraph, rng);
+        let doDual = false;
+        if (scale === "small" || isRoot) {
+            doDual = true;
+        } else if (ctx.dualModeBudget > 0 && instrs.length >= (scale === "huge" ? 35 : 25)) {
+            ctx.dualModeBudget--;
+            doDual = true;
+        }
+        if (doDual) {
+            entryMode = applyDualModePartition(irGraph, rng);
+        }
     }
 
     let encryptedBlocks = new Set();
@@ -1634,6 +1645,8 @@ export function buildV5IR(rootChunk, options, rng) {
         ? "huge"
         : ((totalRawInstrs > 4000 || totalProtos > 50) ? "large" : "small");
     const decoyBudget = scriptScale === "huge" ? 16 : (scriptScale === "large" ? 32 : 999999);
+    const flattenBudget = scriptScale === "huge" ? 6 : (scriptScale === "large" ? 12 : 999999);
+    const dualModeBudget = scriptScale === "huge" ? 12 : (scriptScale === "large" ? 24 : 999999);
 
     // 128-bit Integrity Key Vector KV = [K0, K1, K2, K3], every byte guaranteed in [1..254] (zero-free)
     const randNonZeroU32 = () => {
@@ -1771,6 +1784,8 @@ export function buildV5IR(rootChunk, options, rng) {
         doCFF: options.doCFF !== false,
         scriptScale,
         decoyBudget,
+        flattenBudget,
+        dualModeBudget,
         KV,
         K0, K1, K2, K3,
         K_TARGET: K0, // Legacy alias for existing checks if referenced
