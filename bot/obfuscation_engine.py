@@ -2472,104 +2472,21 @@ end)()
 
 
 
-            # Step 1: Candidate Preparation
-
-            # Enforce Control Flow Flattening (CFF) State Machine as the PRIMARY candidate for all VM presets!
-
-            code_candidates = []
-
-
-
-            def add_candidate(label: str, candidate: str) -> None:
-
-                if candidate and all(existing != candidate for _, existing in code_candidates):
-
-                    code_candidates.append((label, candidate))
-
-
-
-            cff_code = ""
-
-            if engine_choice != "minify":
-
-                try:
-
-                    cff_code = self.apply_cff_flattening(source_code)
-
-                    is_cff_ok, _ = self.verify_lua_syntax(cff_code)
-
-                    if is_cff_ok and cff_code != source_code:
-
-                        # Priority 1: CFF-flattened state machine (unraveling resistant)
-
-                        add_candidate("CFF State-Machine Flattened", cff_code)
-
-                except Exception as cff_err:
-
-                    print(f"[!] CFF Pre-pass skipped: {cff_err}")
-
-
-
-            # Priority 2: Compatibility normalized source
-
-            normalization_error = ""
-
-            try:
-
-                normalized_code = self.normalize_luau_for_vm(source_code)
-
-                if normalized_code != source_code:
-
-                    normalized_valid, normalized_msg = self.verify_lua_syntax(normalized_code)
-
-                    if normalized_valid:
-
-                        add_candidate("Luau compatibility pass", normalized_code)
-
-                    else:
-
-                        normalization_error = f"Compatibility pass produced invalid Luau: {normalized_msg}"
-
-            except Exception as exc:
-
-                normalization_error = f"Compatibility pass failed: {exc}"
-
-
-
-            # Priority 3: Pristine source as last resort fallback for VM input
-
-            add_candidate("source", source_code)
-
-
-
-            # Step 2: Choose engines and resilience tiers
-
+            # Step 1: Choose engines and resilience tiers
             line_count = len(source_code.splitlines())
-
             is_large = line_count > 2500 or original_size > 150000
 
-
-
             final_code = ""
-
             accepted_engine = ""
-
             accepted_verification = ""
-
             last_error = "No pipeline candidate was accepted"
-
-
+            normalization_error = ""
 
             choice_lower = str(engine_choice).lower().strip()
-
             use_pbg = choice_lower in (
-
                 "level1", "1", "fast",
-
                 "level2", "2", "recommended", "default", "balanced",
-
                 "level3", "3", "max", "maximum", "max_cff", "armor"
-
             ) or choice_lower.startswith("level")
 
 
@@ -2618,8 +2535,36 @@ end)()
                     last_error = f"Sentinel v5.3 APEX exception: {v5_exc}"
                     print(f"[SENTINEL v5.3 APEX] Exception: {v5_exc}", flush=True)
 
-            # Priority 2: External Prometheus CLI VM pipeline (if Sentinel v5.1 APEX Node VM unavailable; never degrades to raw loadstring)
+            # Priority 2: External Prometheus CLI VM pipeline (if Sentinel v5.3 APEX unavailable; prepare candidates lazily)
             if not final_code:
+                code_candidates = []
+
+                def add_candidate(label: str, candidate: str) -> None:
+                    if candidate and all(existing != candidate for _, existing in code_candidates):
+                        code_candidates.append((label, candidate))
+
+                if engine_choice != "minify":
+                    try:
+                        cff_code = self.apply_cff_flattening(source_code)
+                        is_cff_ok, _ = self.verify_lua_syntax(cff_code)
+                        if is_cff_ok and cff_code != source_code:
+                            add_candidate("CFF State-Machine Flattened", cff_code)
+                    except Exception as cff_err:
+                        print(f"[!] CFF Pre-pass skipped: {cff_err}")
+
+                try:
+                    normalized_code = self.normalize_luau_for_vm(source_code)
+                    if normalized_code != source_code:
+                        normalized_valid, normalized_msg = self.verify_lua_syntax(normalized_code)
+                        if normalized_valid:
+                            add_candidate("Luau compatibility pass", normalized_code)
+                        else:
+                            normalization_error = f"Compatibility pass produced invalid Luau: {normalized_msg}"
+                except Exception as exc:
+                    normalization_error = f"Compatibility pass failed: {exc}"
+
+                add_candidate("source", source_code)
+
                 configs = []
                 if engine_choice in ("double_vm", "prometheus", "psu_strong"):
                     configs.append((str(self.double_vm_cfg_path), "PAYOMBØYZ Hardened Double-VM Architecture"))

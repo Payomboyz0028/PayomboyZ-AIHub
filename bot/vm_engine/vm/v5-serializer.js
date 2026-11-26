@@ -10,9 +10,9 @@ function toUTF8Bytes(s) {
 
 function lzssCompress(input) {
     const out = [];
-    const WIN = 16384;
-    const MIN_MATCH = 4;
-    const MAX_MATCH = 67;
+    const WIN = 32768;
+    const MIN_MATCH = 3;
+    const MAX_MATCH = 66;
     const MAX_LIT = 128;
     const HASH_SIZE = 1 << 15;
     const HASH_MASK = HASH_SIZE - 1;
@@ -38,7 +38,7 @@ function lzssCompress(input) {
             let j = head[h];
             const limit = Math.max(0, i - WIN);
             let chain = 0;
-            while (j >= limit && chain < 64) {
+            while (j >= limit && chain < 96) {
                 let len = 0;
                 while (len < MAX_MATCH && i + len < input.length && input[j + len] === input[i + len]) len++;
                 if (len > bestLen) { bestLen = len; bestOff = i - j; }
@@ -76,12 +76,14 @@ function lzssCompress(input) {
 }
 
 function writeVarU32(out, val) {
-    let v = val >>> 0;
-    while (v >= 0x80) {
-        out.push((v & 0x7F) | 0x80);
-        v >>>= 7;
+    const v = val >>> 0;
+    if (v < 254) {
+        out.push(v);
+    } else if (v <= 0xFFFF) {
+        out.push(254, v & 0xFF, (v >>> 8) & 0xFF);
+    } else {
+        out.push(255, v & 0xFF, (v >>> 8) & 0xFF, (v >>> 16) & 0xFF, (v >>> 24) & 0xFF);
     }
-    out.push(v);
 }
 
 function writeU32LE(out, val) {
@@ -335,12 +337,9 @@ export function serializeV5Container(v5Root, ctx, rng, extraStrings = []) {
 
         writeVarU32(bin, p.nInstr);
         const cols = [p.arr0, p.arr1, p.arr2, p.arr3, p.arr4];
-        let pLcg = (ctx.K1 ^ Math.imul(pi + 1, 2654435761)) >>> 0;
         for (let i = 0; i < p.nInstr; i++) {
             for (const c of wireColOrder) {
-                pLcg = (Math.imul(pLcg, 1664525) + 1013904223) >>> 0;
-                const val = ((cols[c][i] >>> 0) ^ pLcg) >>> 0;
-                writeVarU32(bin, val);
+                writeVarU32(bin, cols[c][i] >>> 0);
             }
         }
     }
@@ -352,7 +351,7 @@ export function serializeV5Container(v5Root, ctx, rng, extraStrings = []) {
     let compressedFlag = 0;
     if (rawBytes.length >= 64) {
         const comp = lzssCompress(rawBytes);
-        if (comp.length + 1 < rawBytes.length * 0.96) {
+        if (comp.length + 1 < rawBytes.length * 0.99) {
             bodyBytes = comp;
             compressedFlag = 1;
         }
@@ -401,8 +400,9 @@ export function serializeV5Container(v5Root, ctx, rng, extraStrings = []) {
     const b85 = customBase85Encode(cipherBytes, alphabet);
     const { encoded, dictMap } = applyDictCompression(b85, dictTokens);
 
-    // Split payload into 3-6 shuffled chunk literals for CFF assembly
-    const nChunks = Math.min(Math.max(2, Math.floor(encoded.length / 8000) + 2), 6);
+    // Split payload into shuffled chunk literals capped at 16 KB each
+    const MAX_CHUNK_CHARS = 16384;
+    const nChunks = Math.max(2, Math.ceil(encoded.length / MAX_CHUNK_CHARS));
     const chunkSize = Math.ceil(encoded.length / nChunks);
     const chunks = [];
     for (let i = 0; i < encoded.length; i += chunkSize) {

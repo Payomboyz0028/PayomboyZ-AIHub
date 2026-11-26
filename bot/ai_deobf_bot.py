@@ -632,17 +632,52 @@ def build_obfuscate_embed(res: dict, input_name: str) -> tuple[discord.Embed, li
     if script_summary:
         embed.add_field(name="📝 สรุปการทำงานของสคริปต์ (Script Overview)", value=script_summary, inline=False)
 
-    embed.set_footer(text="PAYOMBOYZ Security (Sentinel Engine v5.3 APEX ONYX) • payomboyzcreative.online")
-
     output_path = res.get("output_path")
     obf_code = res.get("obfuscated_code", "")
     out_filename = f"{Path(safe_input_name).stem}_PAYOMBOYZ_OBF.lua"
 
+    raw_payload_bytes: Optional[bytes] = None
     if output_path and os.path.exists(output_path):
-        files.append(discord.File(output_path, filename=out_filename))
-    elif obf_code:
-        file_bytes = io.BytesIO(obf_code.encode("utf-8", errors="replace"))
-        files.append(discord.File(file_bytes, filename=out_filename))
+        try:
+            with open(output_path, "rb") as _rf:
+                raw_payload_bytes = _rf.read()
+        except Exception:
+            raw_payload_bytes = None
+    if raw_payload_bytes is None and obf_code:
+        raw_payload_bytes = obf_code.encode("utf-8", errors="replace")
+
+    actual_bytes_len = len(raw_payload_bytes) if raw_payload_bytes is not None else obf_size
+    if actual_bytes_len > 48 * 1024:
+        rem_kb = max(1, (actual_bytes_len - 51200) // 1024)
+        embed.add_field(
+            name="📥 การดาวน์โหลดไฟล์ขนาดใหญ่",
+            value=(
+                f"กล่องตัวอย่างของ Discord จะแสดงโค้ดแค่ ~50 KB แรก (`... เหลืออีก ~{rem_kb:,} KB`)\n"
+                "👉 กรุณากดปุ่ม **Download (⬇️)** บนไฟล์ที่แนบไปเพื่อรับสคริปต์เต็ม 100% (ห้ามก๊อปจากกล่องตัวอย่าง)"
+            ),
+            inline=False,
+        )
+
+    if raw_payload_bytes is not None:
+        if len(raw_payload_bytes) > 9_500_000:
+            import zipfile
+            zip_buf = io.BytesIO()
+            with zipfile.ZipFile(zip_buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr(out_filename, raw_payload_bytes)
+            zip_buf.seek(0)
+            zip_name = f"{Path(safe_input_name).stem}_PAYOMBOYZ_OBF.zip"
+            files.append(discord.File(zip_buf, filename=zip_name))
+            embed.add_field(
+                name="🗜️ บีบอัดเป็น ZIP อัตโนมัติ",
+                value=f"ไฟล์ต้นทางใหญ่กว่า 9.5 MB จึงถูกบีบอัดเป็น `{zip_name}` เพื่อหลีกเลี่ยงขีดจำกัดไฟล์ของ Discord โดยไม่ตัดโค้ด",
+                inline=False,
+            )
+        elif output_path and os.path.exists(output_path):
+            files.append(discord.File(output_path, filename=out_filename))
+        else:
+            files.append(discord.File(io.BytesIO(raw_payload_bytes), filename=out_filename))
+
+    embed.set_footer(text="PAYOMBOYZ Security (Sentinel Engine v5.3 APEX ONYX) • payomboyzcreative.online")
 
     return embed, files
 

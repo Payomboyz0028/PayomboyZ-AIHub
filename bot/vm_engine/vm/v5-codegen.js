@@ -424,11 +424,11 @@ function buildOpcodeHandlerBody(op, modeCfg, vCtx) {
             const c0 = cArrVars[0], c1 = cArrVars[1], c2 = cArrVars[2], c3 = cArrVars[3], c4 = cArrVars[4];
             return `do local _ln=${vmSym.bx}(${decA},${vmSym.ba}(${stVar},65535));local _l=${vmSym.bx}(${stVar},${vmSym.bx}(${decB},${k1Var}));` +
                 `for _k=1,_ln do local _idx=${qVar}+_k;` +
-                `_l=(${uSym.ta}(_l,1664525)+1013904223)%4294967296;${c0}[_idx]=${vmSym.bx}(${c0}[_idx],_l);` +
-                `_l=(${uSym.ta}(_l,1664525)+1013904223)%4294967296;${c1}[_idx]=${vmSym.bx}(${c1}[_idx],_l);` +
-                `_l=(${uSym.ta}(_l,1664525)+1013904223)%4294967296;${c2}[_idx]=${vmSym.bx}(${c2}[_idx],_l);` +
-                `_l=(${uSym.ta}(_l,1664525)+1013904223)%4294967296;${c3}[_idx]=${vmSym.bx}(${c3}[_idx],_l);` +
-                `_l=(${uSym.ta}(_l,1664525)+1013904223)%4294967296;${c4}[_idx]=${vmSym.bx}(${c4}[_idx],_l)end;` +
+                `_l=(${uSym.ta}(_l,1664525)+1013904223)%4294967296;${c0}[_idx]=${vmSym.bx}(${c0}[_idx],${vmSym.ba}(${vmSym.rs}(_l,16),255));` +
+                `_l=(${uSym.ta}(_l,1664525)+1013904223)%4294967296;${c1}[_idx]=${vmSym.bx}(${c1}[_idx],${vmSym.ba}(${vmSym.rs}(_l,16),255));` +
+                `_l=(${uSym.ta}(_l,1664525)+1013904223)%4294967296;${c2}[_idx]=${vmSym.bx}(${c2}[_idx],${vmSym.ba}(${vmSym.rs}(_l,16),255));` +
+                `_l=(${uSym.ta}(_l,1664525)+1013904223)%4294967296;${c3}[_idx]=${vmSym.bx}(${c3}[_idx],${vmSym.ba}(${vmSym.rs}(_l,16),255));` +
+                `_l=(${uSym.ta}(_l,1664525)+1013904223)%4294967296;${c4}[_idx]=${vmSym.bx}(${c4}[_idx],${vmSym.ba}(${vmSym.rs}(_l,16),255))end;` +
                 `${sOp}[${qVar}]=${vmSym.bx}(${stepStored ^ vCtx.kLo},_kLo);${stVar}=${vmSym.bx}(${stVar},${decC})end`;
         }
         case V5Op.OP_STATE_STEP:
@@ -937,8 +937,8 @@ export function generateV5Lua(container, ctx, options = {}, rng = Math.random) {
             `if _flg==${container.flagRaw} then for _i=0,_rawLen-1 do ${uSym.bw8}(_raw,_i,${uSym.br8}(_pb,9+_i)) end ` +
             `else local _p=9;local _op=0;while _p<_cl and _op<_rawLen do local _ct=${uSym.br8}(_pb,_p);_p=_p+1;` +
             `if _ct<128 then local _n=_ct+1;for _j=1,_n do if _op<_rawLen then ${uSym.bw8}(_raw,_op,${uSym.br8}(_pb,_p));_op=_op+1 end;_p=_p+1 end;` +
-            `elseif _ct<192 then local _ll=_ct-124;local _lo=${uSym.br8}(_pb,_p)+1;_p=_p+1;for _j=1,_ll do if _op<_rawLen then ${uSym.bw8}(_raw,_op,${uSym.br8}(_raw,_op-_lo));_op=_op+1 end end;` +
-            `else local _ll=_ct-188;local _lo=${uSym.br8}(_pb,_p)*256+${uSym.br8}(_pb,_p+1);_p=_p+2;for _j=1,_ll do if _op<_rawLen then ${uSym.bw8}(_raw,_op,${uSym.br8}(_raw,_op-_lo));_op=_op+1 end end end end end;` +
+            `elseif _ct<192 then local _ll=_ct-125;local _lo=${uSym.br8}(_pb,_p)+1;_p=_p+1;for _j=1,_ll do if _op<_rawLen then ${uSym.bw8}(_raw,_op,${uSym.br8}(_raw,_op-_lo));_op=_op+1 end end;` +
+            `else local _ll=_ct-189;local _lo=${uSym.br8}(_pb,_p)*256+${uSym.br8}(_pb,_p+1);_p=_p+2;for _j=1,_ll do if _op<_rawLen then ${uSym.bw8}(_raw,_op,${uSym.br8}(_raw,_op-_lo));_op=_op+1 end end end end end;` +
             `local _mc=${uSym.bx}(_kv[1],_kv[2]);for _mi=0,_rawLen-1 do _mc=${uSym.ta}(${uSym.bx}(_mc,${uSym.br8}(_raw,_mi)),16777619) end;` +
             `if _mc~=_expMac then _kv[2]=${uSym.bx}(_kv[2],1515870810);_kv[3]=${uSym.bx}(_kv[3],2779096485) end ` +
         `end;` +
@@ -952,7 +952,7 @@ export function generateV5Lua(container, ctx, options = {}, rng = Math.random) {
         `local _kb8={${uSym.ba}(_k2,255),${uSym.ba}(${uSym.rs}(_k2,8),255),${uSym.ba}(${uSym.rs}(_k2,16),255),${uSym.ba}(${uSym.rs}(_k2,24),255),${uSym.ba}(_k3,255),${uSym.ba}(${uSym.rs}(_k3,8),255),${uSym.ba}(${uSym.rs}(_k3,16),255),${uSym.ba}(${uSym.rs}(_k3,24),255)};` +
         `local _k2m=${uSym.ba}(_k2,65535);local _k3m=${uSym.ba}(_k3,65535);` +
         `local _pos=0;` +
-        `local function _ru() local _v,_m=0,1;while true do local _b=${uSym.br8}(_raw,_pos);_pos=_pos+1;_v=_v+${uSym.ba}(_b,127)*_m;if _b<128 then return _v end;_m=_m*128 end end;` +
+        `local function _ru() local _b=${uSym.br8}(_raw,_pos);_pos=_pos+1;if _b<254 then return _b elseif _b==254 then local _v=${uSym.br8}(_raw,_pos)+${uSym.br8}(_raw,_pos+1)*256;_pos=_pos+2;return _v else local _v=${uSym.br8}(_raw,_pos)+${uSym.br8}(_raw,_pos+1)*256+${uSym.br8}(_raw,_pos+2)*65536+${uSym.br8}(_raw,_pos+3)*16777216;_pos=_pos+4;return _v end end;` +
         `local _plen=_ru();local _sbuf=${uSym.bcr}(_plen);for _i=0,_plen-1 do ${uSym.bw8}(_sbuf,_i,${uSym.br8}(_raw,_pos+_i)) end;_pos=_pos+_plen;` +
         `local _scache={};` +
         `local function _decStr(_off,_ln,_sl)` +
@@ -981,8 +981,7 @@ export function generateV5Lua(container, ctx, options = {}, rng = Math.random) {
         `local _nuv=_ru();local _uvs={};for _ui=1,_nuv do local _il=${uSym.br8}(_raw,_pos);_pos=_pos+1;_uvs[_ui]={_il,_ru()} end;` +
         `local _nc=_ru();local _chp={};for _ci=1,_nc do _chp[_ci]=_ru()+1 end;` +
         `local _ni=_ru();local _a0,_a1,_a2,_a3,_a4={},{},{},{},{};local _as={_a0,_a1,_a2,_a3,_a4};` +
-        `local _plcg=${uSym.bx}(_k1,${uSym.ta}(_pi,2654435761));` +
-        `for _j=1,_ni do for _wi=1,5 do _plcg=(${uSym.ta}(_plcg,1664525)+1013904223)%4294967296;_as[_wo[_wi]][_j]=${uSym.bx}(_ru(),_plcg) end end;` +
+        `for _j=1,_ni do for _wi=1,5 do _as[_wo[_wi]][_j]=_ru() end end;` +
         `_pool[_pi]={_K,_npa,_mr,(_fl%2==1),(${uSym.ba}(_fl,2)~=0 and 1 or 0),_uvs,_chp,_ni,_a0,_a1,_a2,_a3,_a4,(${uSym.ba}(_fl,4)~=0),(${uSym.ba}(_fl,8)~=0),(${uSym.ba}(_fl,16)~=0),_rb,_kb,_ps}` +
         `end;return ${ST.EXEC},_pool,_ridx,_decStr,nil end`
     );

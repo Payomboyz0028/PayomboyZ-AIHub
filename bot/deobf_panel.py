@@ -85,8 +85,8 @@ def build_compact_guide_embed(mode: str = "deobfuscate") -> discord.Embed:
     color = discord.Color.from_rgb(0, 229, 163)  # Emerald / Teal green matching image.png
     if mode in ("obfuscate", "obf"):
         embed = discord.Embed(
-            title="🎮 Script Obfuscator — VM & CFF Engine",
-            description="อัปโหลดไฟล์สคริปต์ (.lua / .luau / .txt) ➔ ป้องกันสคริปต์ด้วย Clyde VM + CFF ทันที (Public)",
+            title="🎮 Script Obfuscator — Sentinel Engine v5.3 APEX",
+            description="อัปโหลดไฟล์สคริปต์ (.lua / .luau / .txt) ➔ ป้องกันสคริปต์ด้วย Sentinel Engine v5.3 APEX (L1/L2/L3) ทันที — บีบอัดขนาดเล็ก รองรับสคริปต์ใหญ่ไม่ตัดโค้ด",
             color=color
         )
     elif mode in ("clone", "web_clone"):

@@ -817,7 +817,7 @@ function assignPolymorphicVariants(instrs, rng) {
  * Pass 2: Split compacted IR into BasicBlocks, inject Realistic Decoy Blocks, and CFF-shuffle.
  */
 function buildBasicBlocksAndCFF(instrs, END_MARKER, rng, options) {
-    const { doCFF, needFallthrough, decoyCount, proto, rkOffset } = options;
+    const { doCFF, needFallthrough, decoyCount, proto, rkOffset, splitThreshold: optSplitThreshold } = options;
     const emptyBlk = {
         id: 0,
         instrs: [{ op: V5Op.RETURN, A: 0, B: 1, C: 0, D: 0, targetIns: null, targetBlock: null }],
@@ -863,7 +863,7 @@ function buildBasicBlocksAndCFF(instrs, END_MARKER, rng, options) {
 
     if (doCFF) {
         const sortedInit = Array.from(splitIndices).sort((a, b) => a - b);
-        const splitThreshold = 3 + Math.floor(rng() * 3);
+        const splitThreshold = optSplitThreshold ?? (3 + Math.floor(rng() * 3));
         for (let bi = 0; bi < sortedInit.length; bi++) {
             const start = sortedInit[bi];
             const end = bi + 1 < sortedInit.length ? sortedInit[bi + 1] : instrs.length;
@@ -1365,13 +1365,18 @@ function finalizeProtoSoA(proto, ctx, rng, isRoot = false) {
     const kBase = isFast ? 1 : (2 + Math.floor(rng() * 16));
     const protoSalt = (0x010101 + Math.floor(rng() * 0x7EFFFFFF)) >>> 0;
 
+    const scale = ctx.scriptScale || "small";
+    const numConstRate = scale === "huge"
+        ? (isMax ? 0.12 : 0.08)
+        : (scale === "large" ? (isMax ? 0.25 : 0.15) : (isMax ? 0.65 : 0.35));
+
     const raw = decodeRawInstrs(proto.code, ctx.rkOffset);
     let instrs = collapseLoadKX(raw.instrs);
     if (!isFast) {
         instrs = permuteProtoRegisters(instrs, proto, ctx, rng);
     }
     if (!isFast && !isHot) {
-        instrs = irTransformNumericConstants(instrs, proto, ctx, rng, isMax ? 0.65 : 0.35);
+        instrs = irTransformNumericConstants(instrs, proto, ctx, rng, numConstRate);
     }
     instrs = fuseAndSpecialize(instrs, ctx.rkOffset);
     if (!isFast && !isHot) {
@@ -1383,15 +1388,41 @@ function finalizeProtoSoA(proto, ctx, rng, isRoot = false) {
         instrs = assignPolymorphicVariants(instrs, rng);
     }
 
+    let decoyCount;
+    if (scale === "small") {
+        decoyCount = isMax ? (2 + Math.floor(rng() * 3)) : (isBalanced ? 1 : 0);
+    } else if (isFast) {
+        decoyCount = 0;
+    } else if (isRoot) {
+        decoyCount = isMax ? 2 : 1;
+    } else if (ctx.decoyBudget > 0 && instrs.length >= 35) {
+        ctx.decoyBudget--;
+        decoyCount = 1;
+    } else {
+        decoyCount = 0;
+    }
+
+    const splitThreshold = scale === "huge"
+        ? (18 + Math.floor(rng() * 8))
+        : (scale === "large" ? (10 + Math.floor(rng() * 6)) : (3 + Math.floor(rng() * 3)));
+
     const irGraph = buildBasicBlocksAndCFF(instrs, raw.END_MARKER, rng, {
         doCFF: ctx.doCFF,
         needFallthrough: !isFast,
-        decoyCount: isMax ? (2 + Math.floor(rng() * 3)) : (isBalanced ? 1 : 0),
+        decoyCount,
+        splitThreshold,
         proto,
         rkOffset: ctx.rkOffset,
     });
 
-    if (isMax && !isHot && ctx.doCFF) {
+    const doIrFlatten = isMax && !isHot && ctx.doCFF && (
+        scale === "small"
+            ? true
+            : (scale === "large"
+                ? (isRoot || (irGraph.blocks.length >= 4 && irGraph.blocks.length <= 40))
+                : (isRoot || (irGraph.blocks.length >= 6 && irGraph.blocks.length <= 30)))
+    );
+    if (doIrFlatten) {
         irFlattenStateMachine(irGraph, proto, ctx, rng);
     }
 
@@ -1518,7 +1549,7 @@ function finalizeProtoSoA(proto, ctx, rng, isRoot = false) {
 
     // Apply OP_MBA_DECODE_0..3 with path-coupled postState key BEFORE rolling block LCG encryption
     if (isMax && !isHot && ctx.mbaCodecs && ctx.mbaCodecs.length > 0) {
-        const rate = 0.25;
+        const rate = scale === "huge" ? 0.05 : (scale === "large" ? 0.10 : 0.25);
         for (const t of mbaTargets) {
             if (rng() > rate) continue;
             const cIdx = Math.floor(rng() * ctx.mbaCodecs.length);
@@ -1552,7 +1583,7 @@ function finalizeProtoSoA(proto, ctx, rng, isRoot = false) {
                     const idx = (bPc - 1) + k;
                     for (let c = 0; c < 5; c++) {
                         lcg = (Math.imul(lcg, 1664525) + 1013904223) >>> 0;
-                        cols[c][idx] = (cols[c][idx] ^ lcg) >>> 0;
+                        cols[c][idx] = (cols[c][idx] ^ ((lcg >>> 16) & 0xFF)) >>> 0;
                     }
                 }
             }
@@ -1591,6 +1622,18 @@ export function buildV5IR(rootChunk, options, rng) {
     const isMax = level === "max";
     const isFast = level === "fast";
     const numModes = isMax ? 2 : 1;
+
+    let totalRawInstrs = 0, totalProtos = 0;
+    (function countTree(c) {
+        if (!c) return;
+        totalProtos++;
+        totalRawInstrs += (c.code ? Math.floor(c.code.length / 4) : 0);
+        for (const cp of (c.protos || [])) countTree(cp);
+    })(rootChunk);
+    const scriptScale = (totalRawInstrs > 12000 || totalProtos > 150)
+        ? "huge"
+        : ((totalRawInstrs > 4000 || totalProtos > 50) ? "large" : "small");
+    const decoyBudget = scriptScale === "huge" ? 16 : (scriptScale === "large" ? 32 : 999999);
 
     // 128-bit Integrity Key Vector KV = [K0, K1, K2, K3], every byte guaranteed in [1..254] (zero-free)
     const randNonZeroU32 = () => {
@@ -1726,6 +1769,8 @@ export function buildV5IR(rootChunk, options, rng) {
         level,
         isFastMode: isFast,
         doCFF: options.doCFF !== false,
+        scriptScale,
+        decoyBudget,
         KV,
         K0, K1, K2, K3,
         K_TARGET: K0, // Legacy alias for existing checks if referenced
